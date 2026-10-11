@@ -12,11 +12,18 @@
 <p align="center">
   <a href="https://github.com/Chillln/shell-rs/releases"><img src="https://img.shields.io/github/v/release/Chillln/shell-rs?include_prereleases&label=release" alt="Release"></a>
   <a href="#许可证"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
+  <img src="https://img.shields.io/badge/platform-Windows-blue" alt="Platform">
   <img src="https://img.shields.io/badge/rust-1.98-orange" alt="Rust 1.98">
 </p>
 
-> **说明**：本项目为 [Chillln/shell-rs](https://github.com/Chillln/shell-rs) 个人自用二开项目，基于原项目 [since2006/shell-rs](https://github.com/since2006/shell-rs) 定制。移除了应用内自动更新与遥测统计等模块，精简 GitHub Actions 构建流程，专注纯粹轻量的本地体验与 Windows 平台支持。
+> **说明**：本项目为 [Chillln/shell-rs](https://github.com/Chillln/shell-rs) 个人自用二开项目，基于原项目定制。专注于轻量纯粹的 Windows 桌面体验与安全离线能力，核心二开定制特性如下：
+> 
+> - 🔐 **S3 对象存储端到端加密云同步**：接入兼容 S3 协议的对象存储（AWS S3、Cloudflare R2、MinIO 等），采用 Argon2id 密钥派生与 XChaCha20-Poly1305 强加密主机保险库；支持主密码与恢复密钥、对象版本校验、条件 ETag 写入、冲突保留与离线快照恢复；
+> - ⚡ **应用退出确认与自动云同步**：退出应用时提供确认对话框，并在确认后自动合并保存数据并调度加密云同步，确保数据跨设备实时一致；
+> - 🖱️ **终端交互增强配置**：设置 › 终端中新增「终端交互」选项，支持鼠标选中即自动复制，鼠标右键可灵活设置为快速粘贴、显示右键菜单或无动作；
+> - 📦 **Windows 安装包体验优化**：采用官方最新 Inno Setup 7.1.0 64 位编译器打包；安装向导原生纯简体中文界面；支持自定义安装路径，并自动智能检测优先推荐非 C 盘（如 `D:\Programs\ShellRS`）等可用分区；
+> - 🧹 **轻量纯粹与隐私精简**：彻底剥离原项目内置的在线自动更新检查、关于页、官网入口以及匿名遥测统计上报等冗余服务；重构 CI/CD 工作流，专注于 Windows 原生构建并直接发布至 GitHub Releases。
+
 
 ---
 
