@@ -280,11 +280,12 @@ async fn sftp_panes_follow_a_change_of_interface_language(cx: &mut TestAppContex
     .unwrap();
 }
 
-/// The 大小 column shows whole kilobytes, as WinSCP does, until its title's
-/// menu picks another format, which then holds for both panes and is saved.
-/// The menu itself is not driven; the test dispatches what its items do.
+/// 大小列默认自动选择单位，也可以从列标题菜单切换到固定单位。
+/// 两侧共用并保存选择；测试直接派发菜单动作，不驱动右键菜单。
 #[gpui_kit::test]
-async fn sftp_size_column_shows_kilobytes_until_another_format_is_chosen(cx: &mut TestAppContext) {
+async fn sftp_size_column_uses_adaptive_units_until_another_format_is_chosen(
+    cx: &mut TestAppContext,
+) {
     use shellrs::app::SetFileSizeFormat;
     use shellrs::explorer::FileSizeFormat;
     let provider = Arc::new(FakeSftpProvider::default());
@@ -311,9 +312,9 @@ async fn sftp_size_column_shows_kilobytes_until_another_format_is_chosen(cx: &mu
                 .file_size_format
         })
     };
-    // 12 bytes, rounded up.
-    assert_eq!(size(cx, "文件 甲.txt").as_deref(), Some("1 KB"));
-    assert_eq!(saved(cx), FileSizeFormat::Kilobytes);
+    // 默认按实际大小选单位，小文件显示字节。
+    assert_eq!(size(cx, "文件 甲.txt").as_deref(), Some("12 B"));
+    assert_eq!(saved(cx), FileSizeFormat::Short);
 
     for (format, shown) in [
         (FileSizeFormat::Bytes, "12 B"),

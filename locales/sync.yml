@@ -13,6 +13,36 @@ sync.keep_local.confirm:
   zh-CN: 替换云保险库
   en: Replace cloud vault
 
+sync.automatic:
+  zh-CN: 自动同步
+  en: Automatic sync
+sync.automatic_help:
+  zh-CN: 启动、退出以及主机、分组、凭据变更时同步。首次上传或应用云端数据后，数据密钥保存在本机钥匙串，主密码不落盘。双方同时修改时保留冲突副本并提示处理。
+  en: Sync on startup, exit and host, group or credential changes. After uploading or applying cloud data, the data key is saved in this device's keychain; the master password is never saved. Concurrent changes keep conflict copies for review.
+sync.error.automatic_locked:
+  zh-CN: 自动同步尚未解锁，请输入主密码或恢复密钥后完成一次上传或应用云端数据。
+  en: Automatic sync is locked. Enter the master password or recovery key, then upload or apply cloud data once.
+sync.error.pending_preview:
+  zh-CN: 请先应用或取消正在预览的保险库，再重试退出前同步
+  en: Apply or cancel the current vault preview before retrying sync on exit
+sync.status.automatic:
+  zh-CN: 正在自动同步，退出时将等待同步完成…
+  en: Syncing automatically. Exit will wait for completion…
+sync.status.exiting:
+  zh-CN: 正在完成退出前同步，请稍候…
+  en: Finishing sync before exit. Please wait…
+sync.status.automatic_done:
+  zh-CN: 自动同步完成
+  en: Automatic sync completed
+sync.exit_failed.title:
+  zh-CN: 退出前同步未完成
+  en: Sync before exit did not complete
+sync.exit_failed.body:
+  zh-CN: "%{error}。本地数据已保留。取消退出后可以处理问题并重试，或直接退出，下次启动时重试同步。"
+  en: "%{error}. Local data is preserved. Cancel to resolve the issue and retry, or exit now and retry sync on the next startup."
+sync.exit_failed.quit:
+  zh-CN: 直接退出
+  en: Exit now
 sync.title:
   zh-CN: "云同步"
   en: "Cloud sync"
@@ -26,8 +56,8 @@ sync.keywords:
   en: "Cloud sync S3 hosts credentials encryption backup recovery"
 
 sync.description:
-  zh-CN: "在本机加密主机、分组、密码、代理密码和凭据私钥，云端仅保存密文。使用手动上传和下载，多设备修改冲突时由你选择保留的版本。"
-  en: "Encrypt hosts, groups, passwords, proxy passwords, and credential private keys on this device. The cloud stores ciphertext. Upload and download manually, and resolve conflicting changes explicitly."
+  zh-CN: "在本机加密主机、分组、密码、代理密码和凭据私钥，云端仅保存密文。支持自动同步，多设备同时修改时由你选择保留的版本。"
+  en: "Encrypt hosts, groups, passwords, proxy passwords, and credential private keys on this device. The cloud stores ciphertext. Sync automatically and resolve concurrent changes explicitly."
 
 sync.field.endpoint:
   zh-CN: "端点（留空使用 AWS S3）"

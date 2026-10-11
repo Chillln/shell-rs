@@ -39,8 +39,8 @@ explorer.size_format.kilobytes:
   zh-CN: 千字节（KB）
   en: Kilobytes (KB)
 explorer.size_format.short:
-  zh-CN: 简短格式（B、KB、MB、GB）
-  en: Short (B, KB, MB, GB)
+  zh-CN: 自动单位（B、KB、MB、GB、TB）
+  en: Automatic units (B, KB, MB, GB, TB)
 
 explorer.column.name:
   zh-CN: 名称

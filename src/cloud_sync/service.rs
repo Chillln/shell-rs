@@ -33,6 +33,14 @@ struct Cursor {
     etag: String,
     vault_id: String,
     revision: u64,
+    #[serde(default)]
+    digest: Option<[u8; 32]>,
+}
+
+pub(crate) enum AutomaticSync {
+    Unchanged,
+    Uploaded,
+    Download(Box<Download>),
 }
 
 pub(crate) struct Upload {
@@ -41,6 +49,7 @@ pub(crate) struct Upload {
 }
 
 pub(crate) struct Download {
+    automatic: bool,
     open: OpenVault,
     version: Option<ObjectVersion>,
     scope: String,
@@ -58,6 +67,7 @@ pub(crate) struct ImportStage {
     cursor: Option<Cursor>,
     cursor_path: Option<PathBuf>,
     committed: bool,
+    device_key: Option<(SecretRef, Zeroizing<String>)>,
 }
 
 struct SecretUndo {
@@ -138,6 +148,109 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 impl SyncServices {
+    pub fn available(&self) -> bool {
+        self.directory.is_some()
+    }
+
+    /// 根据最近一次成功同步的基线判断方向，双方都有修改时保留冲突副本。
+    pub fn automatic(
+        &self,
+        settings: &CloudSyncSettings,
+        local: &HostInventory,
+        secrets: SharedSecretStore,
+    ) -> Result<AutomaticSync> {
+        let scope = settings.scope();
+        let key = secrets
+            .get(&settings.secret("device-key"))?
+            .ok_or_else(|| anyhow::anyhow!(t!("sync.error.automatic_locked")))?;
+        let cursor = self
+            .cursor(&scope)?
+            .ok_or_else(|| anyhow::anyhow!(t!("sync.error.automatic_locked")))?;
+        let baseline = cursor
+            .digest
+            .ok_or_else(|| anyhow::anyhow!(t!("sync.error.automatic_locked")))?;
+        let remote = self
+            .storage(settings, &secrets)?
+            .get()?
+            .ok_or_else(|| anyhow::anyhow!(t!("sync.error.remote_deleted")))?;
+        let open = OpenVault::open_device(&remote.bytes, &key)?;
+        self.check_remote(&scope, &open)?;
+        let current = Vault::capture(local, secrets.as_ref())?;
+        let local_digest = open.content_digest(&current)?;
+        let remote_digest = open.content_digest(&open.vault)?;
+        if local_digest == remote_digest {
+            self.save_cursor(&scope, &remote.etag, &open, local_digest)?;
+            return Ok(AutomaticSync::Unchanged);
+        }
+        if local_digest == baseline {
+            return self
+                .prepare_download(
+                    open,
+                    Some(ObjectVersion {
+                        etag: remote.etag,
+                        version: remote.version,
+                    }),
+                    scope,
+                    local,
+                    secrets,
+                )
+                .map(|download| AutomaticSync::Download(Box::new(download)));
+        }
+        if remote.etag == cursor.etag && remote_digest == baseline {
+            self.upload(settings, local, secrets, "", "")?;
+            return Ok(AutomaticSync::Uploaded);
+        }
+        self.backup(&remote.bytes, "cloud-conflict")?;
+        let backup = self.backup(&open.seal(&current)?, "local-conflict")?;
+        anyhow::bail!(t!("sync.error.conflict_backup", path = backup.display()))
+    }
+
+    fn save_cursor(
+        &self,
+        scope: &str,
+        etag: &str,
+        open: &OpenVault,
+        digest: [u8; 32],
+    ) -> Result<()> {
+        atomic_write(
+            &self.cursor_path(scope)?,
+            &serde_json::to_vec(&Cursor {
+                etag: etag.to_string(),
+                vault_id: open.id().to_string(),
+                revision: open.vault.revision,
+                digest: Some(digest),
+            })?,
+        )
+    }
+
+    fn remember_key(
+        settings: &CloudSyncSettings,
+        open: &OpenVault,
+        secrets: &SharedSecretStore,
+    ) -> Result<()> {
+        if settings.automatic {
+            secrets.set(&settings.secret("device-key"), &open.device_key()?)?;
+        }
+        Ok(())
+    }
+
+    fn unlock(
+        settings: &CloudSyncSettings,
+        bytes: &[u8],
+        secrets: &SharedSecretStore,
+        password: &str,
+        recovery: &str,
+    ) -> Result<OpenVault> {
+        if password.is_empty() && recovery.is_empty() {
+            let saved = secrets
+                .get(&settings.secret("device-key"))?
+                .ok_or_else(|| anyhow::anyhow!(t!("sync.error.automatic_locked")))?;
+            OpenVault::open_device(bytes, &saved)
+        } else {
+            crypto::open(bytes, password, recovery)
+        }
+    }
+
     pub fn new(directory: PathBuf) -> Self {
         Self {
             directory: Some(directory),
@@ -223,6 +336,9 @@ impl SyncServices {
                 .is_some_and(|key| !key.is_empty()),
             t!("sync.error.access_key")
         );
+        if !settings.automatic {
+            secrets.delete(&settings.secret("device-key"))?;
+        }
         Ok(())
     }
 
@@ -239,9 +355,9 @@ impl SyncServices {
         let storage = self.storage(settings, &secrets)?;
         let scope = settings.scope();
         let remote = storage.get()?;
-        let (bytes, recovery_key, expected, id) = match remote {
+        let (bytes, recovery_key, expected, opened) = match remote {
             Some(remote) => {
-                let opened = crypto::open(&remote.bytes, password, recovery)?;
+                let opened = Self::unlock(settings, &remote.bytes, &secrets, password, recovery)?;
                 self.check_remote(&scope, &opened)?;
                 let cursor = self.cursor(&scope)?;
                 if !cursor
@@ -266,7 +382,7 @@ impl SyncServices {
                         etag: remote.etag,
                         version: remote.version,
                     }),
-                    opened.id().to_string(),
+                    opened,
                 )
             }
             None => {
@@ -278,9 +394,10 @@ impl SyncServices {
                 let opened = crypto::open(&bytes, password, "")?;
                 // 创建请求的响应可能丢失，先保存恢复密钥，保证仍可找回。
                 secrets.set(&settings.secret("recovery-key"), &recovery)?;
-                (bytes, Some(recovery), None, opened.id().to_string())
+                (bytes, Some(recovery), None, opened)
             }
         };
+        let digest = opened.content_digest(&vault)?;
         let backup = self.backup(&bytes, "upload")?;
         let written = storage.put(bytes, expected.as_ref()).map_err(|error| {
             anyhow::anyhow!(t!(
@@ -289,12 +406,14 @@ impl SyncServices {
                 path = backup.display()
             ))
         })?;
+        Self::remember_key(settings, &opened, &secrets)?;
         atomic_write(
             &self.cursor_path(&scope)?,
             &serde_json::to_vec(&Cursor {
                 etag: written.etag,
-                vault_id: id,
+                vault_id: opened.id().to_string(),
                 revision: vault.revision,
+                digest: Some(digest),
             })?,
         )?;
         Ok(Upload {
@@ -328,6 +447,10 @@ impl SyncServices {
             local,
             secrets,
         )
+        .map(|mut download| {
+            download.automatic = settings.automatic;
+            download
+        })
     }
 
     /// 用户在预览中选择保留本地后，仍然按预览的远端版本执行条件上传。
@@ -362,6 +485,7 @@ impl SyncServices {
             .ok_or_else(|| anyhow::anyhow!(t!("sync.error.format")))?;
         let bytes = download.open.seal(&current)?;
         let backup = self.backup(&bytes, "keep-local")?;
+        let digest = download.open.content_digest(&current)?;
         let written = self
             .storage(settings, &secrets)?
             .put(bytes, Some(&expected))
@@ -372,12 +496,14 @@ impl SyncServices {
                     path = backup.display()
                 ))
             })?;
+        Self::remember_key(settings, &download.open, &secrets)?;
         atomic_write(
             &self.cursor_path(&download.scope)?,
             &serde_json::to_vec(&Cursor {
                 etag: written.etag,
                 vault_id: download.open.id().to_string(),
                 revision: current.revision,
+                digest: Some(digest),
             })?,
         )?;
         Ok(Upload {
@@ -414,6 +540,7 @@ impl SyncServices {
         let current = Vault::capture(local, secrets.as_ref())?;
         let backup = self.backup(&open.seal(&current)?, "before-download")?;
         Ok(Download {
+            automatic: false,
             stamp: inventory_stamp(local),
             digest: vault_digest(&current)?,
             open,
@@ -458,10 +585,20 @@ impl SyncServices {
         } else {
             None
         };
+        let digest = download.open.content_digest(&download.open.vault)?;
+        let device_key = if download.automatic && download.version.is_some() {
+            Some((
+                SecretRef::cloud_sync(download.scope.clone(), "device-key"),
+                download.open.device_key()?,
+            ))
+        } else {
+            None
+        };
         let cursor = download.version.map(|version| Cursor {
             etag: version.etag,
             vault_id: download.open.id().to_string(),
             revision: download.open.vault.revision,
+            digest: Some(digest),
         });
         let mut stage = ImportStage {
             inventory: HostInventory::new(Vec::new(), Vec::new(), Vec::new()),
@@ -471,6 +608,7 @@ impl SyncServices {
             cursor,
             cursor_path,
             committed: false,
+            device_key,
         };
         let outcome = (|| -> Result<()> {
             let vault = &download.open.vault;
@@ -564,6 +702,9 @@ impl ImportStage {
     /// 数据库成功后才推进游标；游标保存失败时仍保留已经导入的数据。
     pub fn commit(mut self) -> Result<()> {
         self.committed = true;
+        if let Some((secret, key)) = &self.device_key {
+            self.secrets.set(secret, key)?;
+        }
         if let (Some(cursor), Some(path)) = (&self.cursor, &self.cursor_path) {
             atomic_write(path, &serde_json::to_vec(cursor)?)?;
         }

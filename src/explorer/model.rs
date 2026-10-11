@@ -262,12 +262,12 @@ pub fn path_ancestors(path: &str, remote: bool) -> Vec<(String, String)> {
 pub enum FileSizeFormat {
     /// Every byte: `4,105,175,040 B`.
     Bytes,
-    /// Whole kilobytes, the way Explorer and WinSCP show them by default:
-    /// `4,008,960 KB`. One unit down the column, so the length of a number
-    /// is its magnitude, and fine enough to compare both sides of a copy.
-    #[default]
+    /// 固定千字节单位，便于逐行比较文件大小。
+    #[serde(rename = "fixed_kilobytes")]
     Kilobytes,
-    /// The unit that suits each size: `3.8 GB`.
+    /// 默认按大小自动选择单位；升级时把旧的固定 KB 默认值迁移到这里。
+    #[default]
+    #[serde(alias = "kilobytes")]
     Short,
 }
 
@@ -433,7 +433,16 @@ mod tests {
     #[test]
     fn the_size_column_shows_bytes_whole_kilobytes_or_short_sizes() {
         let [bytes, kilobytes, short] = FileSizeFormat::ALL;
-        assert_eq!(FileSizeFormat::default(), kilobytes);
+        assert_eq!(FileSizeFormat::default(), short);
+        assert_eq!(
+            serde_json::from_str::<FileSizeFormat>("\"kilobytes\"").unwrap(),
+            short
+        );
+        assert_eq!(
+            serde_json::from_str::<FileSizeFormat>(&serde_json::to_string(&kilobytes).unwrap())
+                .unwrap(),
+            kilobytes
+        );
 
         assert_eq!(bytes.format(0), "0 B");
         assert_eq!(bytes.format(999), "999 B");

@@ -26,12 +26,18 @@ use crate::{
     },
 };
 
-const PASSWORD: &str = "测试保险库主密码-12345";
+pub(crate) const PASSWORD: &str = "测试保险库主密码-12345";
 
 #[derive(Default)]
-struct MemoryStorage {
+pub(crate) struct MemoryStorage {
     contents: Mutex<(Option<Vec<u8>>, u64)>,
-    force_conflict: std::sync::atomic::AtomicBool,
+    pub(crate) force_conflict: std::sync::atomic::AtomicBool,
+}
+
+impl MemoryStorage {
+    pub(crate) fn service(self: &Arc<Self>, directory: &std::path::Path) -> SyncServices {
+        SyncServices::with_storage(directory.into(), self.clone())
+    }
 }
 
 impl VaultStorage for MemoryStorage {
@@ -62,12 +68,19 @@ impl VaultStorage for MemoryStorage {
     }
 }
 
-fn settings() -> CloudSyncSettings {
+pub(crate) fn settings() -> CloudSyncSettings {
     CloudSyncSettings {
         bucket: "test-bucket".into(),
         access_key_id: "test-access".into(),
         ..Default::default()
     }
+}
+
+pub(crate) fn test_open_cloud(storage: &MemoryStorage) -> HostInventory {
+    crypto::open(&storage.get().unwrap().unwrap().bytes, PASSWORD, "")
+        .unwrap()
+        .vault
+        .inventory(&HostStore::empty().inventory(), &Default::default())
 }
 
 fn inventory() -> HostInventory {
@@ -138,6 +151,194 @@ fn secrets(inventory: &HostInventory) -> Arc<InMemorySecretStore> {
         )
         .unwrap();
     secrets
+}
+
+#[test]
+fn automatic_sync_uploads_edits_and_credentials_without_saving_the_master_password() {
+    use super::service::AutomaticSync;
+    let dir = tempfile::tempdir().unwrap();
+    let storage = Arc::new(MemoryStorage::default());
+    let service = SyncServices::with_storage(dir.path().into(), storage.clone());
+    let mut local = inventory();
+    let secrets = secrets(&local);
+    let settings = settings();
+    service
+        .upload(&settings, &local, secrets.clone(), PASSWORD, "")
+        .unwrap();
+    let saved = secrets
+        .get(&settings.secret("device-key"))
+        .unwrap()
+        .unwrap();
+    assert!(!saved.contains(PASSWORD));
+    assert!(matches!(
+        service
+            .automatic(&settings, &local, secrets.clone())
+            .unwrap(),
+        AutomaticSync::Unchanged
+    ));
+    let version = storage.get().unwrap().unwrap().etag;
+    local.hosts[0].name = "已修改主机".into();
+    secrets
+        .set(&local.credentials[0].password_secret(), "新凭据密码")
+        .unwrap();
+    assert!(matches!(
+        service
+            .automatic(&settings, &local, secrets.clone())
+            .unwrap(),
+        AutomaticSync::Uploaded
+    ));
+    let remote = storage.get().unwrap().unwrap();
+    assert_ne!(version, remote.etag);
+    let opened = crypto::open(&remote.bytes, PASSWORD, "").unwrap();
+    assert_eq!(
+        opened.content_digest(&opened.vault).unwrap(),
+        opened
+            .content_digest(&Vault::capture(&local, secrets.as_ref()).unwrap())
+            .unwrap()
+    );
+    assert!(matches!(
+        service
+            .automatic(&settings, &local, secrets.clone())
+            .unwrap(),
+        AutomaticSync::Unchanged
+    ));
+    local.hosts.remove(0);
+    local
+        .hosts
+        .iter_mut()
+        .for_each(|host| host.route = Route::Direct);
+    assert!(matches!(
+        service.automatic(&settings, &local, secrets).unwrap(),
+        AutomaticSync::Uploaded
+    ));
+}
+
+#[test]
+fn automatic_sync_pulls_remote_changes_and_preserves_concurrent_edits() {
+    use super::service::AutomaticSync;
+    let a_dir = tempfile::tempdir().unwrap();
+    let b_dir = tempfile::tempdir().unwrap();
+    let storage = Arc::new(MemoryStorage::default());
+    let a = SyncServices::with_storage(a_dir.path().into(), storage.clone());
+    let b = SyncServices::with_storage(b_dir.path().into(), storage.clone());
+    let settings = settings();
+    let mut a_local = inventory();
+    let a_secrets = secrets(&a_local);
+    a.upload(&settings, &a_local, a_secrets.clone(), PASSWORD, "")
+        .unwrap();
+    let b_empty = HostStore::empty().inventory();
+    let b_secrets = Arc::new(InMemorySecretStore::default());
+    let download = b
+        .download(&settings, &b_empty, b_secrets.clone(), PASSWORD, "")
+        .unwrap();
+    let stage = b
+        .stage_import(download, &b_empty, None, b_secrets.clone())
+        .unwrap();
+    let mut b_local = stage.inventory.clone();
+    stage.commit().unwrap();
+    a_local.groups[0].name = "云端分组".into();
+    a.automatic(&settings, &a_local, a_secrets.clone()).unwrap();
+    let download = match b.automatic(&settings, &b_local, b_secrets.clone()).unwrap() {
+        AutomaticSync::Download(download) => download,
+        _ => panic!("必须下载云端修改"),
+    };
+    let stage = b
+        .stage_import(*download, &b_local, None, b_secrets.clone())
+        .unwrap();
+    b_local = stage.inventory.clone();
+    stage.commit().unwrap();
+    assert!(b_local.groups.iter().any(|group| group.name == "云端分组"));
+    assert!(matches!(
+        b.automatic(&settings, &b_local, b_secrets.clone()).unwrap(),
+        AutomaticSync::Unchanged
+    ));
+    a_local.hosts[0].notes = "设备甲修改".into();
+    b_local.hosts[0].notes = "设备乙修改".into();
+    a.automatic(&settings, &a_local, a_secrets).unwrap();
+    let remote_before = storage.get().unwrap().unwrap().bytes;
+    let error = b.automatic(&settings, &b_local, b_secrets).err().unwrap();
+    assert!(error.to_string().contains("冲突"));
+    assert_eq!(remote_before, storage.get().unwrap().unwrap().bytes);
+    assert!(
+        std::fs::read_dir(b_dir.path().join("backups"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .contains("local-conflict"))
+    );
+}
+
+#[test]
+fn automatic_sync_does_not_advance_the_baseline_on_a_failed_upload() {
+    use super::service::AutomaticSync;
+    let dir = tempfile::tempdir().unwrap();
+    let storage = Arc::new(MemoryStorage::default());
+    let service = SyncServices::with_storage(dir.path().into(), storage.clone());
+    let settings = settings();
+    let mut local = inventory();
+    let secrets = secrets(&local);
+    service
+        .upload(&settings, &local, secrets.clone(), PASSWORD, "")
+        .unwrap();
+    let path = dir.path().join(format!("cursor-{}.json", settings.scope()));
+    let before = std::fs::read(&path).unwrap();
+    local.hosts[0].notes = "等待重试".into();
+    storage.force_conflict.store(true, Ordering::SeqCst);
+    assert!(
+        service
+            .automatic(&settings, &local, secrets.clone())
+            .is_err()
+    );
+    assert_eq!(before, std::fs::read(&path).unwrap());
+    storage.force_conflict.store(false, Ordering::SeqCst);
+    assert!(matches!(
+        service
+            .automatic(&settings, &local, secrets.clone())
+            .unwrap(),
+        AutomaticSync::Uploaded
+    ));
+    let mut legacy: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    legacy.as_object_mut().unwrap().remove("digest");
+    std::fs::write(&path, serde_json::to_vec(&legacy).unwrap()).unwrap();
+    assert!(
+        service
+            .automatic(&settings, &local, secrets)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("尚未解锁")
+    );
+}
+
+#[test]
+fn automatic_preference_keeps_the_existing_profile_and_can_forget_the_device_key() {
+    let mut settings = settings();
+    let encoded = r#"{"endpoint":"","region":"us-east-1","bucket":"test-bucket","object_key":"shellrs/vault.enc","access_key_id":"test-access","virtual_hosted":false}"#;
+    use sha2::Digest;
+    assert_eq!(
+        settings.scope(),
+        format!("{:x}", sha2::Sha256::digest(encoded.as_bytes()))
+    );
+    let original = settings.scope();
+    let secrets: SharedSecretStore = Arc::new(InMemorySecretStore::default());
+    secrets
+        .set(&settings.secret("device-key"), "已保存的数据密钥")
+        .unwrap();
+    secrets
+        .set(&settings.secret("secret-access-key"), "访问密钥")
+        .unwrap();
+    settings.automatic = false;
+    assert_eq!(original, settings.scope());
+    SyncServices::save_credentials(&settings, "", "", &secrets).unwrap();
+    assert!(
+        secrets
+            .get(&settings.secret("device-key"))
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

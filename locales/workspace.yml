@@ -171,6 +171,12 @@ workspace.files.pair:
 workspace.files.several:
   zh-CN: “%{first}”等 %{count} 个文件
   en: "%{count} files including “%{first}”"
+workspace.quit.body:
+  zh-CN: 退出后将关闭所有连接和传输。已启用的自动云同步会在退出前完成。
+  en: Exiting closes all connections and transfers. Enabled automatic cloud sync will finish before exit.
+workspace.quit.confirm:
+  zh-CN: 退出
+  en: Exit
 workspace.unsaved.quit_title:
   zh-CN: 退出 ShellRS？
   en: Quit ShellRS?

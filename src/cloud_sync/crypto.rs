@@ -10,6 +10,7 @@ use chacha20poly1305::{
 };
 use rand::RngCore as _;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use super::vault::Vault;
@@ -199,6 +200,11 @@ pub(super) fn open(bytes: &[u8], password: &str, recovery: &str) -> Result<OpenV
             .try_into()
             .map_err(|_| anyhow::anyhow!(t!("sync.error.format")))?,
     );
+    open_key(envelope, key)
+}
+
+fn open_key(envelope: Envelope, key: Zeroizing<[u8; 32]>) -> Result<OpenVault> {
+    ensure!(envelope.version == FORMAT_VERSION, t!("sync.error.format"));
     let plain = decrypt(
         &key,
         &envelope.data_nonce,
@@ -217,6 +223,32 @@ pub(super) fn open(bytes: &[u8], password: &str, recovery: &str) -> Result<OpenV
 }
 
 impl OpenVault {
+    /// 仅保存保险库数据密钥到系统钥匙串，主密码不落盘。
+    pub fn device_key(&self) -> Result<Zeroizing<String>> {
+        Ok(Zeroizing::new(serde_json::to_string(&(
+            self.id(),
+            self.key.as_ref(),
+        ))?))
+    }
+
+    pub fn open_device(bytes: &[u8], saved: &str) -> Result<Self> {
+        ensure!(bytes.len() <= MAX_ENCRYPTED_BYTES, t!("sync.error.size"));
+        let envelope: Envelope =
+            serde_json::from_slice(bytes).map_err(|_| anyhow::anyhow!(t!("sync.error.format")))?;
+        let (id, key): (String, Zeroizing<[u8; 32]>) =
+            serde_json::from_str(saved).map_err(|_| anyhow::anyhow!(t!("sync.error.unlock")))?;
+        ensure!(id == envelope.vault_id, t!("sync.error.rollback"));
+        open_key(envelope, key)
+    }
+
+    pub fn content_digest(&self, vault: &Vault) -> Result<[u8; 32]> {
+        // 摘要加密钥，游标文件不能用于离线猜测凭据。
+        let mut digest = Sha256::new();
+        digest.update(self.key.as_ref());
+        digest.update(vault.canonical_content()?.as_slice());
+        Ok(digest.finalize().into())
+    }
+
     pub fn id(&self) -> &str {
         &self.envelope.vault_id
     }

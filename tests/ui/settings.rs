@@ -50,6 +50,7 @@ fn cloud_sync_validates_configuration_and_keeps_access_secrets_in_keychain(
             Some("shellrs/vault.enc")
         );
         reveal_cloud_control(window, "sync-save", cx);
+        assert_eq!(window.find("sync-automatic").checked(), Some(true));
         window.click("sync-save", cx);
     })
     .unwrap();
@@ -88,6 +89,7 @@ fn cloud_sync_validates_configuration_and_keeps_access_secrets_in_keychain(
                 .contains("测试访问密钥")
         );
         assert_eq!(secrets.len(), 1);
+        assert!(settings.cloud_sync.automatic);
     });
     cx.update_window(handle.into(), |_, window, cx| {
         reveal_cloud_control(window, "sync-status", cx);

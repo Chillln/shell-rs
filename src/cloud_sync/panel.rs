@@ -49,6 +49,7 @@ pub struct CloudSyncPanel {
     password: Entity<InputState>,
     recovery: Entity<InputState>,
     virtual_hosted: bool,
+    automatic: bool,
     dispatch: FocusHandle,
     phase: SyncPhase,
     status: SharedString,
@@ -88,6 +89,7 @@ impl CloudSyncPanel {
             password: input("", true, window, cx),
             recovery: input("", true, window, cx),
             virtual_hosted: settings.virtual_hosted,
+            automatic: settings.automatic,
             dispatch,
             phase: SyncPhase::Idle,
             status: t!("sync.status.ready"),
@@ -106,6 +108,7 @@ impl CloudSyncPanel {
                 object_key: self.object_key.read(cx).value().to_string(),
                 access_key_id: self.access_key.read(cx).value().to_string(),
                 virtual_hosted: self.virtual_hosted,
+                automatic: self.automatic,
             },
             secret_key: Zeroizing::new(self.secret_key.read(cx).value().to_string()),
             token: Zeroizing::new(self.token.read(cx).value().to_string()),
@@ -257,6 +260,23 @@ impl Render for CloudSyncPanel {
                                 this.virtual_hosted = *checked;
                                 cx.notify();
                             })),
+                    )
+                    .child(
+                        Checkbox::new("sync-automatic")
+                            .small()
+                            .label(t!("sync.automatic"))
+                            .checked(self.automatic)
+                            .disabled(busy || preview)
+                            .on_click(cx.listener(|this, checked, _, cx| {
+                                this.automatic = *checked;
+                                cx.notify();
+                            })),
+                    )
+                    .child(
+                        div()
+                            .text_sm()
+                            .text_color(cx.theme().muted_foreground)
+                            .child(t!("sync.automatic_help")),
                     )
                     .child(
                         h_flex()

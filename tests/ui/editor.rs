@@ -496,11 +496,12 @@ async fn quitting_with_unsaved_changes_asks_first(cx: &mut TestAppContext) {
     open_file(cx, handle, "remote-pane", "文件 甲.txt");
     wait_for_editor(cx, handle, FIRST).await;
 
-    // Nothing unsaved: nothing asked.
+    // 即使没有未保存文件，也必须确认退出。
     cx.update(|cx| cx.dispatch_action(&Quit));
     cx.run_until_parked();
-    in_frame(cx, handle, |window, _| {
-        assert!(window.try_find("ok").is_none())
+    in_frame(cx, handle, |window, cx| {
+        assert!(window.try_find("ok").is_some());
+        window.click("cancel", cx);
     });
 
     type_text(cx, handle, "1");

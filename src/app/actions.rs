@@ -127,6 +127,8 @@ gpui_kit::actions!(
         ZoomTerminalReset,
         /// Quit the application.
         Quit,
+        /// 确认退出后先完成最后一次云同步。
+        ConfirmQuit,
         /// Show the previewed image larger, by one step.
         ZoomPreviewIn,
         /// Show the previewed image smaller, by one step.

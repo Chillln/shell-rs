@@ -145,6 +145,13 @@ pub struct Workspace {
     pub(super) cloud_sync_services: crate::cloud_sync::SyncServices,
     pub(super) cloud_sync_pending: Option<crate::cloud_sync::Download>,
     pub(super) cloud_sync_task: Option<Task<()>>,
+    pub(super) auto_sync_delay: Option<Task<()>>,
+    pub(super) auto_sync_task: Option<Task<()>>,
+    pub(super) auto_sync_running: bool,
+    pub(super) auto_sync_requested: bool,
+    pub(super) auto_sync_stamp: [u8; 32],
+    pub(super) exit_requested: bool,
+    pub(super) auto_start_forwards: bool,
     pub(super) store: Entity<HostStore>,
     pub(super) dock_area: Entity<DockArea>,
     skin: Rc<WorkspaceDockSkin>,
@@ -269,6 +276,10 @@ impl Workspace {
         this.sync_cli_server(cx);
         this.cloud_sync_services =
             crate::cloud_sync::SyncServices::new(crate::app::data_dir().join("cloud-sync"));
+        let entity = cx.weak_entity();
+        window.defer(cx, move |window, cx| {
+            let _ = entity.update(cx, |this, cx| this.request_automatic_sync(window, cx));
+        });
         this.remember_window(crate::app::window_state_path(), window, cx);
         this
     }
@@ -345,6 +356,7 @@ impl Workspace {
                 this.hold_tool_sidebar_width(window, cx)
             }),
             cx.observe_in(&store, window, |this, _, window, cx| {
+                this.on_sync_inventory_changed(window, cx);
                 this.sync_cli_server(cx);
                 // The system a host runs decides which tools it is offered.
                 this.sync_tool_sidebar(window, cx);
@@ -428,8 +440,7 @@ impl Workspace {
                 });
             });
         });
-        // ⌘Q (and on Windows and Linux the window's close button) asks first
-        // when an editor has changes not saved yet.
+        // 退出命令与 Windows、Linux 的关闭按钮共用确认与同步流程。
         let this = cx.weak_entity();
         crate::app::set_quit_guard(
             window.window_handle(),
@@ -496,13 +507,35 @@ impl Workspace {
         skin.set_center_empty(terminals.is_empty(), cx);
         // Rules marked to start with the application. What they need to ask
         // arrives as events, once the workspace is there to show it.
-        forwards.update(cx, |forwards, cx| forwards.start_automatic(cx));
+        let entity = cx.weak_entity();
+        window.defer(cx, move |_, cx| {
+            let _ = entity.update(cx, |this, cx| {
+                // 先完成启动同步，再按同步后的主机配置启动自动转发。
+                let settings = this.settings.read(cx).settings().cloud_sync;
+                if this.cloud_sync_services.available()
+                    && settings.automatic
+                    && settings.validated().is_ok()
+                {
+                    this.auto_start_forwards = true;
+                } else {
+                    this.forwards
+                        .update(cx, |forwards, cx| forwards.start_automatic(cx));
+                }
+            });
+        });
 
         Self {
             cloud_sync,
             cloud_sync_services: Default::default(),
             cloud_sync_pending: None,
             cloud_sync_task: None,
+            auto_sync_delay: None,
+            auto_sync_task: None,
+            auto_sync_running: false,
+            auto_sync_requested: false,
+            auto_sync_stamp: crate::cloud_sync::inventory_stamp(&store.read(cx).inventory()),
+            exit_requested: false,
+            auto_start_forwards: false,
             store,
             dock_area,
             skin,
@@ -1186,6 +1219,9 @@ impl Workspace {
                         this.cloud_sync
                             .update(cx, |panel, cx| panel.clear_unlock_inputs(window, cx));
                         this.settings_tab = None;
+                        if this.auto_sync_requested {
+                            this.request_automatic_sync(window, cx);
+                        }
                         if this.active_tab == Some(CenterTab::Settings) {
                             this.set_active_tab(None, window, cx);
                         }
@@ -2482,6 +2518,7 @@ impl Render for Workspace {
             .key_context("Workspace")
             .track_focus(&self.focus_handle)
             .on_action(cx.listener(Self::on_new_host))
+            .on_action(cx.listener(Self::on_confirm_quit))
             .on_action(cx.listener(Self::on_new_temporary_connection))
             .on_action(cx.listener(Self::on_quick_connect))
             .on_action(cx.listener(Self::on_new_local_terminal))

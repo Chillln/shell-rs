@@ -82,6 +82,21 @@ pub(super) struct VaultCredential {
 }
 
 impl Vault {
+    /// 摘要不包含远端修订号和本地路径，并按稳定标识排序。
+    pub(super) fn canonical_content(&self) -> Result<Zeroizing<Vec<u8>>> {
+        let mut groups: Vec<_> = self.groups.iter().collect();
+        let mut hosts: Vec<_> = self.hosts.iter().collect();
+        let mut credentials: Vec<_> = self.credentials.iter().collect();
+        groups.sort_by_key(|record| &record.id);
+        hosts.sort_by_key(|record| &record.id);
+        credentials.sort_by_key(|record| &record.id);
+        Ok(Zeroizing::new(serde_json::to_vec(&(
+            groups,
+            hosts,
+            credentials,
+        ))?))
+    }
+
     pub fn capture(inventory: &HostInventory, secrets: &dyn SecretStore) -> Result<Self> {
         ensure!(
             inventory.groups.len() + inventory.hosts.len() + inventory.credentials.len()

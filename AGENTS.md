@@ -46,7 +46,7 @@ cargo test -- --ignored                     # 会读写真实钥匙串的测试�
 - `sftp/` — 可注入传输与本地目录接口、`RemotePath`、russh-sftp 3.0.0 协议适配、有界并发分块上传、UUID 临时文件、安全替换、原子 JSON 续传记录和三次自动重连。`ssh/connection.rs` 的 `SshConnector` 与终端共享认证、钥匙串服务及 known_hosts 写锁。
 - `workspace/` — `workspace_view.rs` 持有 `HostStore`、`DockArea`、按主机登记的面板注册表，以及**全部动作处理器**；`title_bar.rs`、`status_bar.rs`、`recent_hosts.rs`（中间区没有标签页时显示的「最近连接」开始页，**不是** Dock 面板）、`dock_skin.rs`（`WorkspaceDockSkin`：包一层 `DockSkin`，中间区为空时用 `deferred` 把开始页画在空的中间区之上；工作区在 `DockEvent::LayoutChanged` 时同步「中间区是否为空」并在刚变空时把焦点移到开始页）。
 - `shared/` — 多个功能共用的展示片段（`ClosableTabTitle`、`HostMark`）。
-- `cloud_sync/` — 手动 S3 加密保险库同步，独立格式、Argon2id 与 XChaCha20-Poly1305 密钥封套、条件写入、加密备份与导入补偿。密码只回写系统钥匙串；主机清单通过 `HostInventory` 边界在数据库事务中应用。`Workspace::new_with_services` 默认没有网络与备份路径，测试完全注入。详见 `docs/cloud-sync.md`。
+- `cloud_sync/` — S3 加密保险库同步，独立格式、Argon2id 与 XChaCha20-Poly1305 密钥封套、条件写入、加密备份与导入补偿。自动同步用钥匙串中的数据密钥及成功基线判断方向，双方修改时保留冲突副本；主密码不落盘。`workspace/automatic_sync.rs` 在启动、清单变更和退出时调度，等待密码保存完成，启动同步先于自动转发。密码只回写系统钥匙串；主机清单通过 `HostInventory` 边界在数据库事务中应用。`Workspace::new_with_services` 默认没有网络与备份路径，测试完全注入。详见 `docs/cloud-sync.md`。
 
 关键流程与不变量：
 

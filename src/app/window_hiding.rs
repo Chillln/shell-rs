@@ -1,13 +1,6 @@
-//! On macOS the window's close button hides ShellRS instead of closing it.
-//!
-//! ShellRS has one window, and the workspace in it owns everything that
-//! runs: connections, transfers, port forwards, the external CLI. Closing
-//! it would stop all of that yet leave the app in the Dock with no window,
-//! and the Dock icon could not bring one back. So, like Mac terminals,
-//! closing hides the app: the Dock icon, ⌘Tab or opening ShellRS again
-//! shows the window as it was, and ⌘Q quits. Windows and Linux quit when
-//! the window closes, as GPUI does there by default, but like ⌘Q only once
-//! the quit guard lets them (unsaved changes in an editor are asked about).
+//! macOS 关闭窗口只隐藏应用，连接、传输、转发与外部 CLI 继续运行。
+//! 点 Dock 图标、⌘Tab 或再次启动会恢复原窗口，⌘Q 才真正退出。
+//! Windows 与 Linux 关闭窗口走退出确认，并等待已启用的云同步完成。
 
 use gpui_kit::{App, Window};
 

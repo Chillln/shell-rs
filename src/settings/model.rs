@@ -417,7 +417,7 @@ mod tests {
         assert_eq!(settings.language, InterfaceLanguage::default());
         let settings: AppSettings = serde_json::from_str(r#"{"later":1}"#).unwrap();
         assert_eq!(settings, AppSettings::default());
-        assert_eq!(settings.file_size_format, FileSizeFormat::Kilobytes);
+        assert_eq!(settings.file_size_format, FileSizeFormat::Short);
         let settings: AppSettings =
             serde_json::from_str(r#"{"file_size_format":"short"}"#).unwrap();
         assert_eq!(settings.file_size_format, FileSizeFormat::Short);

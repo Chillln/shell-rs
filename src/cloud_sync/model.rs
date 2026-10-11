@@ -16,6 +16,8 @@ pub struct CloudSyncSettings {
     pub object_key: String,
     pub access_key_id: String,
     pub virtual_hosted: bool,
+    /// 开启后在成功手动同步时把数据密钥保存在本机钥匙串。
+    pub automatic: bool,
 }
 
 impl Default for CloudSyncSettings {
@@ -27,6 +29,7 @@ impl Default for CloudSyncSettings {
             object_key: "shellrs/vault.enc".into(),
             access_key_id: String::new(),
             virtual_hosted: false,
+            automatic: true,
         }
     }
 }
@@ -69,7 +72,25 @@ impl CloudSyncSettings {
 
     /// 远端位置与签名方式共同标识配置，切换位置后不会沿用旧版本游标。
     pub(crate) fn scope(&self) -> String {
-        let encoded = serde_json::to_vec(self).expect("sync configuration is serializable");
+        // 自动同步偏好不改变远端身份，保留已有钥匙串条目和版本游标。
+        #[derive(Serialize)]
+        struct Profile<'a> {
+            endpoint: &'a str,
+            region: &'a str,
+            bucket: &'a str,
+            object_key: &'a str,
+            access_key_id: &'a str,
+            virtual_hosted: bool,
+        }
+        let encoded = serde_json::to_vec(&Profile {
+            endpoint: &self.endpoint,
+            region: &self.region,
+            bucket: &self.bucket,
+            object_key: &self.object_key,
+            access_key_id: &self.access_key_id,
+            virtual_hosted: self.virtual_hosted,
+        })
+        .expect("sync configuration is serializable");
         format!("{:x}", Sha256::digest(encoded))
     }
 

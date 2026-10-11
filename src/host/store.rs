@@ -57,6 +57,7 @@ mod snippets;
 /// channel alone.
 pub struct HostStore {
     secret_revision: Cell<u64>,
+    pending_secrets: usize,
     groups: Vec<HostGroup>,
     hosts: Vec<Host>,
     /// Hosts connected to without saving them: not listed. Their ids come
@@ -237,6 +238,7 @@ impl HostStore {
     pub fn empty() -> Self {
         Self {
             secret_revision: Cell::new(0),
+            pending_secrets: 0,
             groups: Vec::new(),
             hosts: Vec::new(),
             temporary: Vec::new(),
@@ -303,6 +305,7 @@ impl HostStore {
         }
         Ok(Self {
             secret_revision: Cell::new(0),
+            pending_secrets: 0,
             next_group_id: groups.iter().map(|group| group.id.0).max().unwrap_or(0) + 1,
             next_host_id: hosts.iter().map(|s| s.id.0).max().unwrap_or(0) + 1,
             next_forward_id: forwards.iter().map(|rule| rule.id.0).max().unwrap_or(0) + 1,
@@ -1609,6 +1612,7 @@ impl HostStore {
     ) -> Task<Result<(), SharedString>> {
         self.secret_revision
             .set(self.secret_revision.get().wrapping_add(1));
+        self.pending_secrets += 1;
         let secrets = self.secrets();
         let failure = secret_failure(&secret, value.is_some());
         cx.spawn(async move |this, cx| {
@@ -1621,6 +1625,13 @@ impl HostStore {
                     }
                 })
                 .await;
+            let _ = this.update(cx, |store, cx| {
+                store.pending_secrets -= 1;
+                store
+                    .secret_revision
+                    .set(store.secret_revision.get().wrapping_add(1));
+                cx.notify();
+            });
             result.map_err(|error| {
                 let message = failure(&error.to_string());
                 this.update(cx, |_, cx| {
@@ -1630,6 +1641,11 @@ impl HostStore {
                 message
             })
         })
+    }
+
+    /// 自动同步等待已发起的钥匙串写入完成，防止上传旧密码。
+    pub fn has_pending_secrets(&self) -> bool {
+        self.pending_secrets != 0
     }
 
     /// The distinct password entries these hosts log in with, their

@@ -133,12 +133,15 @@ impl Workspace {
                         panel.reset_recovery();
                     });
                     match saved {
-                        Ok(()) => this.cloud_sync_status(
-                            SyncPhase::Idle,
-                            t!("sync.status.saved"),
-                            false,
-                            cx,
-                        ),
+                        Ok(()) => {
+                            this.cloud_sync_status(
+                                SyncPhase::Idle,
+                                t!("sync.status.saved"),
+                                false,
+                                cx,
+                            );
+                            this.request_automatic_sync(window, cx);
+                        }
                         Err(error) => this.cloud_sync_error(error, cx),
                     }
                 }
@@ -459,6 +462,9 @@ impl Workspace {
         self.cloud_sync_pending = None;
         self.cloud_sync
             .update(cx, |panel, cx| panel.lock(window, cx));
+        if self.auto_sync_requested {
+            self.request_automatic_sync(window, cx);
+        }
     }
 
     pub(super) fn on_keep_local_cloud_vault(

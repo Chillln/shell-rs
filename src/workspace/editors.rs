@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::dock::{DockPlacement, panel_handle};
 use gpui_kit::*;
 
@@ -244,23 +245,33 @@ impl Workspace {
         self.unsaved_files(&ids, cx)
     }
 
-    /// The quit guard: with changes not saved, ask before quitting and hold
-    /// the quit back (true) until the user agrees.
+    /// 退出始终确认，有未保存文件时说明丢弃后果，确认后等待云同步。
     pub(super) fn ask_before_quit(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let unsaved = self.all_unsaved_files(cx);
-        if unsaved.is_empty() {
-            return false;
+        if self.exit_requested || window.has_active_dialog(cx) {
+            return true;
         }
         // A hidden window (closed on macOS) would ask where nobody sees it.
         crate::app::bring_forward(window, cx);
+        let focus = self.focus_handle.clone();
         confirm_danger(
             t!("workspace.unsaved.quit_title"),
-            Some(t!(
-                "workspace.unsaved.quit",
-                files = describe_files(&unsaved)
-            )),
-            t!("workspace.unsaved.discard_and_quit"),
-            Rc::new(|_, cx| cx.quit()),
+            Some(if unsaved.is_empty() {
+                t!("workspace.quit.body")
+            } else {
+                t!("workspace.unsaved.quit", files = describe_files(&unsaved))
+            }),
+            if unsaved.is_empty() {
+                t!("workspace.quit.confirm")
+            } else {
+                t!("workspace.unsaved.discard_and_quit")
+            },
+            Rc::new(move |window, cx| {
+                let focus = focus.clone();
+                window.defer(cx, move |window, cx| {
+                    focus.dispatch_action(&crate::app::ConfirmQuit, window, cx)
+                });
+            }),
             window,
             cx,
         );
