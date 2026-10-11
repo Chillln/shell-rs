@@ -64,6 +64,61 @@ impl Render for NameForm {
 }
 
 impl ExplorerPanel {
+    /// 先展示远端目录与不可恢复的后果，再交给 SSH 通道执行强制删除。
+    pub(super) fn confirm_force_delete(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let names = self.remote.read(cx).selected_names(cx);
+        if names.is_empty() || !self.can_modify(true, cx) || window.has_active_dialog(cx) {
+            return;
+        }
+        let directory = self.remote.read(cx).path();
+        let title = if let [name] = names.as_slice() {
+            t!("explorer.force_delete.title_one", name = name)
+        } else {
+            tn!("explorer.force_delete.title_several", names.len())
+        };
+        let description = t!("explorer.force_delete.description", directory = directory);
+        let sender = self.sender();
+        let focus = window.focused(cx);
+        window.open_alert_dialog(cx, move |dialog, _, _| {
+            dialog
+                .title(title.clone())
+                .description(description.clone())
+                .button_props(
+                    DialogButtonProps::default()
+                        .ok_text(t!("explorer.command.force_delete"))
+                        .ok_variant(ButtonVariant::Danger)
+                        .cancel_text(t!("common.cancel")),
+                )
+                .show_cancel(true)
+                .on_cancel({
+                    let focus = focus.clone();
+                    move |_, window, cx| {
+                        if let Some(focus) = &focus {
+                            window.focus(focus, cx);
+                        }
+                        true
+                    }
+                })
+                .on_ok({
+                    let (sender, focus, names) = (sender.clone(), focus.clone(), names.clone());
+                    move |_, window, cx| {
+                        sender.send(
+                            ExplorerCommand::Operate {
+                                remote: true,
+                                operation: PaneOperation::ForceDelete(names.clone()),
+                            },
+                            window,
+                            cx,
+                        );
+                        if let Some(focus) = &focus {
+                            window.focus(focus, cx);
+                        }
+                        true
+                    }
+                })
+        });
+    }
+
     /// 删除: confirm with the scope and consequence, then delete. Local
     /// items go to the Trash; remote ones are gone for good.
     pub(super) fn confirm_delete(

@@ -84,26 +84,38 @@ pub(super) fn item_menu(menu: PopupMenu, state: &PaneMenuState) -> PopupMenu {
     } else {
         (t!("explorer.command.upload"), CatalogIcon::Upload)
     };
+    let menu = menu
+        .menu_with_icon_and_disabled(
+            verb,
+            Icon::new(icon),
+            state.action(ExplorerCommand::Transfer { remote }),
+            state.targets.is_empty() || !state.can_transfer,
+        )
+        .menu_with_icon_and_disabled(
+            t!("explorer.command.copy_path"),
+            Icon::new(IconName::Copy),
+            state.action(ExplorerCommand::CopySelectedPaths { remote }),
+            state.targets.is_empty(),
+        )
+        .separator()
+        .menu_with_icon_and_disabled(
+            t!("common.delete"),
+            Icon::new(CatalogIcon::Trash),
+            state.action(ExplorerCommand::Delete { remote }),
+            none,
+        );
+    let menu = if remote {
+        menu.menu_with_icon_and_disabled(
+            t!("explorer.command.force_delete"),
+            Icon::new(CatalogIcon::Trash),
+            state.action(ExplorerCommand::ForceDeleteRemote),
+            none,
+        )
+        .separator()
+    } else {
+        menu
+    };
     menu.menu_with_icon_and_disabled(
-        verb,
-        Icon::new(icon),
-        state.action(ExplorerCommand::Transfer { remote }),
-        state.targets.is_empty() || !state.can_transfer,
-    )
-    .menu_with_icon_and_disabled(
-        t!("explorer.command.copy_path"),
-        Icon::new(IconName::Copy),
-        state.action(ExplorerCommand::CopySelectedPaths { remote }),
-        state.targets.is_empty(),
-    )
-    .separator()
-    .menu_with_icon_and_disabled(
-        t!("common.delete"),
-        Icon::new(CatalogIcon::Trash),
-        state.action(ExplorerCommand::Delete { remote }),
-        none,
-    )
-    .menu_with_icon_and_disabled(
         t!("explorer.command.rename"),
         Icon::new(CatalogIcon::SquarePen),
         state.action(ExplorerCommand::Rename { remote }),

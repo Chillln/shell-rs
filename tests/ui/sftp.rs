@@ -1317,6 +1317,64 @@ async fn local_places_are_read_again_with_each_listing(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
+async fn force_delete_requires_confirmation_and_uses_remote_paths(cx: &mut TestAppContext) {
+    use shellrs::app::{ExplorerAction, ExplorerCommand};
+    let provider = Arc::new(FakeSftpProvider::default());
+    let (handle, _) = open_workspace_with_sftp(cx, provider.clone());
+    open_test_explorer(cx, handle).await;
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window
+            .within(("remote-pane", SFTP_TAB))
+            .click("name:目录", cx);
+        window.dispatch_action(
+            Box::new(ExplorerAction::new(
+                ExplorerId(SFTP_TAB),
+                ExplorerCommand::ForceDeleteRemote,
+            )),
+            cx,
+        );
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("ok").visible());
+        window.click("cancel", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    assert!(provider.force_deletes.lock().unwrap().is_empty());
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window.dispatch_action(
+            Box::new(ExplorerAction::new(
+                ExplorerId(SFTP_TAB),
+                ExplorerCommand::ForceDeleteRemote,
+            )),
+            cx,
+        );
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window.click("ok", cx);
+    })
+    .unwrap();
+    cx.wait_for(handle.into(), Duration::from_secs(2), |_, _| {
+        !provider.force_deletes.lock().unwrap().is_empty()
+    })
+    .await;
+    assert_eq!(
+        *provider.force_deletes.lock().unwrap(),
+        vec![vec![RemotePath::new("/home/tester/目录").unwrap()]]
+    );
+}
+
+#[gpui_kit::test]
 async fn sftp_file_commands_confirm_validate_and_send_one_operation(cx: &mut TestAppContext) {
     use shellrs::app::{ExplorerAction, ExplorerCommand};
     use shellrs::explorer::NewEntryKind;

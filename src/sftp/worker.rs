@@ -241,6 +241,26 @@ impl SshSftpTransport {
                                     .await;
                             });
                         }
+                        SftpCommand::ForceDelete { request_id, paths } => {
+                            let shared = client.clone();
+                            let connected = client.read().await.clone();
+                            let events = events.clone();
+                            tokio::spawn(async move {
+                                let result = match connected {
+                                    Some(connected) => match connected.force_delete(&paths).await {
+                                        Ok(()) => Ok(()),
+                                        Err(error) => {
+                                            drop_broken(&shared, &connected, &events, &error).await;
+                                            Err(format!("{error:#}"))
+                                        }
+                                    },
+                                    None => Err(not_connected()),
+                                };
+                                let _ = events
+                                    .send(SftpEvent::Operated { request_id, result })
+                                    .await;
+                            });
+                        }
                         SftpCommand::ReadFile { request_id, path } => {
                             let shared = client.clone();
                             let connected = client.read().await.clone();

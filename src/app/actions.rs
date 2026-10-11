@@ -538,6 +538,8 @@ pub enum ExplorerCommand {
     Delete {
         remote: bool,
     },
+    /// 确认后通过远端 SSH 命令强制删除右侧选中的项目。
+    ForceDeleteRemote,
     /// Carry out a confirmed delete, rename, new item or permission change
     /// in the pane's directory.
     Operate {

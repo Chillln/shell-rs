@@ -757,6 +757,7 @@ impl ExplorerPanel {
             }
             ExplorerCommand::Enqueue(job) => self.enqueue(job.clone(), window, cx),
             ExplorerCommand::Delete { remote } => self.confirm_delete(*remote, window, cx),
+            ExplorerCommand::ForceDeleteRemote => self.confirm_force_delete(window, cx),
             ExplorerCommand::Rename { remote } => self.open_rename(*remote, window, cx),
             ExplorerCommand::New { remote, kind } => self.open_new(*remote, *kind, window, cx),
             ExplorerCommand::Properties { remote } => self.open_properties(*remote, window, cx),
@@ -993,6 +994,7 @@ fn needs_connection(command: &ExplorerCommand) -> bool {
         | C::New { remote, .. }
         | C::Properties { remote }
         | C::Operate { remote, .. } => *remote,
+        C::ForceDeleteRemote => true,
         C::Transfer { .. }
         | C::DownloadPaths { .. }
         | C::ChooseFiles

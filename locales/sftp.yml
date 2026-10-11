@@ -324,3 +324,15 @@ sftp.client.ambiguous_name:
 sftp.sync.delete_failed:
   zh-CN: 无法删除：%{error}
   en: "Couldn’t delete: %{error}"
+sftp.error.force_delete_path:
+  zh-CN: 强制删除只接受非根目录的绝对路径，且路径不能包含 . 或 ..
+  en: Force delete requires absolute paths outside the root without . or .. components
+sftp.error.force_delete_no_ssh:
+  zh-CN: 当前 SFTP 连接没有可用的 SSH 命令通道
+  en: This SFTP connection has no SSH command channel
+sftp.error.force_delete_exit:
+  zh-CN: rm -rf 执行失败（%{status}）：%{detail}
+  en: "rm -rf failed (%{status}): %{detail}"
+sftp.error.force_delete_no_details:
+  zh-CN: 服务器未返回错误详情
+  en: The server returned no error details

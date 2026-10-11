@@ -87,3 +87,49 @@ pub(super) async fn delete_tree<F: RemoteFs>(fs: &F, root: &RemotePath) -> Resul
     }
     Ok(())
 }
+
+/// 将绝对路径变成单个 POSIX shell 参数；拒绝根目录与点路径。
+pub(super) fn force_delete_command(paths: &[RemotePath]) -> Result<String> {
+    if paths.is_empty() {
+        bail!(t!("sftp.error.force_delete_path"));
+    }
+    let mut command = String::from("rm -rf --");
+    for path in paths {
+        let raw = path.as_str();
+        if !raw.starts_with('/')
+            || raw.trim_matches('/').is_empty()
+            || raw.split('/').any(|part| matches!(part, "." | ".."))
+        {
+            bail!(t!("sftp.error.force_delete_path"));
+        }
+        command.push_str(" '");
+        command.push_str(&raw.replace('\'', r"'\''"));
+        command.push('\'');
+    }
+    Ok(command)
+}
+
+#[cfg(test)]
+mod force_delete_tests {
+    use super::{RemotePath, force_delete_command};
+
+    #[test]
+    fn quotes_each_remote_path_as_one_shell_argument() {
+        let paths = [
+            RemotePath::new("/home/u/a b;$HOME").unwrap(),
+            RemotePath::new("/home/u/it's here").unwrap(),
+        ];
+        assert_eq!(
+            force_delete_command(&paths).unwrap(),
+            "rm -rf -- '/home/u/a b;$HOME' '/home/u/it'\\''s here'"
+        );
+    }
+
+    #[test]
+    fn refuses_root_relative_and_dot_paths() {
+        for path in ["/", "////", "relative", "/a/../b", "/a/./b"] {
+            assert!(force_delete_command(&[RemotePath::new(path).unwrap()]).is_err());
+        }
+        assert!(force_delete_command(&[]).is_err());
+    }
+}

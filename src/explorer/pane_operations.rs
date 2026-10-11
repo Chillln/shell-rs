@@ -19,6 +19,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PaneOperation {
     Delete(Vec<String>),
+    ForceDelete(Vec<String>),
     Rename {
         from: String,
         to: String,
@@ -49,6 +50,7 @@ impl PaneOperation {
     fn failure_title(&self) -> fn() -> SharedString {
         match self {
             PaneOperation::Delete(_) => || t!("explorer.operation.delete_failed"),
+            PaneOperation::ForceDelete(_) => || t!("explorer.operation.force_delete_failed"),
             PaneOperation::Rename { .. } => || t!("explorer.operation.rename_failed"),
             PaneOperation::Create { .. } => || t!("explorer.operation.create_failed"),
             PaneOperation::Permissions { .. } => || t!("explorer.operation.permissions_failed"),
@@ -73,6 +75,7 @@ impl PaneOperation {
             PaneOperation::Delete(names) => RemoteOperation::Delete {
                 paths: paths(names)?,
             },
+            PaneOperation::ForceDelete(_) => unreachable!("强制删除使用独立的 SSH 命令"),
             PaneOperation::Rename { from, to } => RemoteOperation::Rename {
                 from: directory.join(from)?,
                 to: directory.join(to)?,
@@ -110,6 +113,7 @@ impl PaneOperation {
         };
         match self {
             PaneOperation::Delete(names) => provider.trash(&paths(names)),
+            PaneOperation::ForceDelete(_) => unreachable!("强制删除只适用于远端"),
             PaneOperation::Rename { from, to } => {
                 provider.rename(&directory.join(from), &directory.join(to))
             }
@@ -149,6 +153,9 @@ impl ExplorerPanel {
         if !self.can_modify(remote, cx) {
             return;
         }
+        if !remote && matches!(operation, PaneOperation::ForceDelete(_)) {
+            return;
+        }
         let pane = self.pane(remote).clone();
         let directory = pane.read(cx).path();
         self.next_operation += 1;
@@ -171,11 +178,27 @@ impl ExplorerPanel {
         );
         pane.update(cx, |pane, cx| pane.set_busy(true, cx));
         if remote {
-            match operation.to_remote(&directory) {
-                Ok(operation) => self.send(SftpCommand::Operate {
-                    request_id: id,
-                    operation,
-                }),
+            let command = match &operation {
+                PaneOperation::ForceDelete(names) => RemotePath::new(&directory)
+                    .and_then(|path| {
+                        names
+                            .iter()
+                            .map(|name| path.join(name))
+                            .collect::<Result<Vec<_>>>()
+                    })
+                    .map(|paths| SftpCommand::ForceDelete {
+                        request_id: id,
+                        paths,
+                    }),
+                _ => operation
+                    .to_remote(&directory)
+                    .map(|operation| SftpCommand::Operate {
+                        request_id: id,
+                        operation,
+                    }),
+            };
+            match command {
+                Ok(command) => self.send(command),
                 Err(error) => self.finish_operation(id, Err(format!("{error:#}")), window, cx),
             }
         } else {

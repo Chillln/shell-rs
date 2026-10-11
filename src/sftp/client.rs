@@ -1,7 +1,10 @@
-use super::{DirectoryEntry, DirectoryListing, EntryKind, FileMetadata, RemotePath};
+use super::{DirectoryEntry, DirectoryListing, EntryKind, FileMetadata, RemotePath, operations};
 use crate::connection::Latency;
 use crate::i18n::t;
-use crate::ssh::{SshConnectionConfig, SshConnector, SshHandle, SshPrompts};
+use crate::ssh::{
+    ExecExit, ExecStream, SshConnectionConfig, SshConnector, SshHandle, SshPrompts,
+    run_on_connection,
+};
 use anyhow::{Result, anyhow, bail};
 use futures::StreamExt as _;
 use russh_sftp::{
@@ -151,6 +154,41 @@ impl SftpClient {
                 .ok_or_else(|| anyhow!(t!("sftp.client.no_path")))?
                 .filename,
         )?)
+    }
+    /// 使用 SFTP 所在 SSH 连接的独立 exec 通道执行已确认的强制删除。
+    pub async fn force_delete(&self, paths: &[RemotePath]) -> Result<()> {
+        let command = operations::force_delete_command(paths)?;
+        let ssh = self
+            .ssh
+            .as_ref()
+            .ok_or_else(|| anyhow!(t!("sftp.error.force_delete_no_ssh")))?;
+        let mut stderr = Vec::new();
+        let exit = run_on_connection(ssh, &command, &mut |stream, bytes| {
+            if stream == ExecStream::Stderr {
+                stderr.extend_from_slice(&bytes[..bytes.len().min(4096 - stderr.len())]);
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|error| anyhow!(error.message))?;
+        if exit != ExecExit::Code(0) {
+            let detail = String::from_utf8_lossy(&stderr).trim().to_string();
+            let detail = if detail.is_empty() {
+                t!("sftp.error.force_delete_no_details").to_string()
+            } else {
+                detail
+            };
+            let status = match exit {
+                ExecExit::Code(code) => code.to_string(),
+                ExecExit::Signal(signal) => signal,
+            };
+            bail!(t!(
+                "sftp.error.force_delete_exit",
+                status = status,
+                detail = detail
+            ));
+        }
+        Ok(())
     }
     /// A directory for the browser: canonical path, owners, and what each
     /// link points to (resolved concurrently, one `stat` per link).

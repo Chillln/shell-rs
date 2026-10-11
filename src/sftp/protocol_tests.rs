@@ -1,4 +1,4 @@
-//! Loopback-only SSH/SFTP worker tests. No user hosts, credentials or shell.
+//! 本地回环 SSH/SFTP 工作线程测试，不访问用户主机或凭据。
 use super::*;
 use crate::{
     connection::{ConnectionPromptKind, ConnectionPromptReply, ConnectionSecret, Latency},
@@ -106,6 +106,30 @@ impl server::Handler for Handler {
     ) -> Result<(), Self::Error> {
         self.shells.fetch_add(1, Ordering::SeqCst);
         session.channel_failure(channel)?;
+        Ok(())
+    }
+    async fn exec_request(
+        &mut self,
+        channel: ChannelId,
+        command: &[u8],
+        session: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        if !command.starts_with(b"rm -rf -- ") {
+            session.channel_failure(channel)?;
+            return Ok(());
+        }
+        session.channel_success(channel)?;
+        let output = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(std::str::from_utf8(command)?)
+            .output()
+            .await?;
+        if !output.stderr.is_empty() {
+            session.extended_data(channel, 1, output.stderr)?;
+        }
+        session.exit_status_request(channel, output.status.code().unwrap_or(255) as u32)?;
+        session.eof(channel)?;
+        session.close(channel)?;
         Ok(())
     }
     async fn subsystem_request(
@@ -652,6 +676,57 @@ fn worker_downloads_and_resumes_after_an_interrupted_read() {
         assert_eq!(server.connections.load(Ordering::SeqCst), 2);
         assert_eq!(std::fs::read(out.join("文件.bin")).unwrap(), data);
         assert!(!out.join("文件.bin.filepart").exists());
+    });
+}
+
+#[test]
+fn force_delete_uses_exec_on_the_existing_sftp_connection() {
+    runtime().block_on(async {
+        let temp = tempfile::tempdir().unwrap();
+        let remote = temp.path().join("remote");
+        std::fs::create_dir(&remote).unwrap();
+        std::fs::create_dir(remote.join("目录 with space")).unwrap();
+        std::fs::write(remote.join("目录 with space").join("nested.txt"), b"x").unwrap();
+        std::fs::write(remote.join("it's a file"), b"x").unwrap();
+        let Some(server) = server(remote.clone(), 0, false).await else {
+            return;
+        };
+        let worker = worker(server.port, temp.path());
+        let home = loop {
+            match next(&worker).await {
+                SftpEvent::Connected { home } => break home,
+                SftpEvent::Disconnected(error) => panic!("connect failed: {error}"),
+                _ => {}
+            }
+        };
+        worker
+            .commands
+            .send(SftpCommand::ForceDelete {
+                request_id: 42,
+                paths: vec![
+                    home.join("目录 with space").unwrap(),
+                    home.join("it's a file").unwrap(),
+                ],
+            })
+            .await
+            .unwrap();
+        loop {
+            match next(&worker).await {
+                SftpEvent::Operated {
+                    request_id: 42,
+                    result,
+                } => {
+                    result.unwrap();
+                    break;
+                }
+                SftpEvent::Disconnected(error) => panic!("command disconnected: {error}"),
+                _ => {}
+            }
+        }
+        assert!(!remote.join("目录 with space").exists());
+        assert!(!remote.join("it's a file").exists());
+        assert_eq!(server.connections.load(Ordering::SeqCst), 1);
+        assert_eq!(server.shells.load(Ordering::SeqCst), 0);
     });
 }
 

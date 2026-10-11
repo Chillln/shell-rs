@@ -12,6 +12,7 @@ pub use connection::{
     AgentLocation, ForwardedTcpip, MissingCredential, SshConnectionConfig, SshConnector, SshHandle,
     SshPrompts, is_network_error,
 };
+pub(crate) use exec::run_on_connection;
 pub use exec::{ExecError, ExecErrorKind, ExecExit, ExecStream, run_command};
 pub use latency::{LATENCY_INTERVAL, round_trip};
 pub use tester::{SshConnectionTester, describe_login_error};

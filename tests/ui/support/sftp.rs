@@ -12,6 +12,8 @@ pub struct FakeSftpProvider {
     pub requests: Arc<Mutex<Vec<UploadRequest>>>,
     pub downloads: Arc<Mutex<Vec<shellrs::sftp::DownloadRequest>>>,
     pub operations: Arc<Mutex<Vec<shellrs::sftp::RemoteOperation>>>,
+    /// 已确认并发往远端 SSH 通道的强制删除路径。
+    pub force_deletes: Arc<Mutex<Vec<Vec<RemotePath>>>>,
     pub events: Arc<Mutex<Vec<async_channel::Sender<SftpEvent>>>>,
     /// When set, the next connection waits for a message before it is up.
     pub hold_connection: Arc<Mutex<Option<mpsc::Receiver<()>>>>,
@@ -65,6 +67,7 @@ impl SftpTransportProvider for FakeSftpProvider {
             requests: self.requests.clone(),
             downloads: self.downloads.clone(),
             operations: self.operations.clone(),
+            force_deletes: self.force_deletes.clone(),
             events: self.events.clone(),
             hold: self.hold_connection.lock().unwrap().take(),
             reconnects: self.reconnects.clone(),
@@ -84,6 +87,7 @@ pub struct FakeSftpTransport {
     pub requests: Arc<Mutex<Vec<UploadRequest>>>,
     pub downloads: Arc<Mutex<Vec<shellrs::sftp::DownloadRequest>>>,
     pub operations: Arc<Mutex<Vec<shellrs::sftp::RemoteOperation>>>,
+    pub force_deletes: Arc<Mutex<Vec<Vec<RemotePath>>>>,
     pub events: Arc<Mutex<Vec<async_channel::Sender<SftpEvent>>>>,
     pub hold: Option<mpsc::Receiver<()>>,
     pub reconnects: Arc<Mutex<usize>>,
@@ -145,6 +149,13 @@ impl SftpTransport for FakeSftpTransport {
                         } else {
                             Ok(())
                         },
+                    })?;
+                }
+                SftpCommand::ForceDelete { request_id, paths } => {
+                    self.force_deletes.lock().unwrap().push(paths);
+                    events.send_blocking(SftpEvent::Operated {
+                        request_id,
+                        result: Ok(()),
                     })?;
                 }
                 SftpCommand::ReadFile { request_id, path } => {

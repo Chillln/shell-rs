@@ -170,6 +170,20 @@ explorer.toolbar.download_tip:
 explorer.toolbar.choose_files:
   zh-CN: 选择文件上传…
   en: Choose files to upload…
+explorer.command.force_delete:
+  zh-CN: rm -rf 强制删除
+  en: Force delete with rm -rf
+
+explorer.force_delete.title_one:
+  zh-CN: 强制删除「%{name}」？
+  en: Force delete “%{name}”?
+explorer.force_delete.title_several.other:
+  zh-CN: 强制删除 %{count} 个项目？
+  en: Force delete %{count} items?
+explorer.force_delete.description:
+  zh-CN: 将在服务器执行 rm -rf，永久删除「%{directory}」下所选项目及目录内全部内容。此操作无法撤销，仅适用于支持 POSIX shell 的主机。
+  en: Runs rm -rf on the server to permanently delete the selected items under “%{directory}” and all folder contents. This cannot be undone and requires a POSIX shell.
+
 explorer.command.rename:
   zh-CN: 重命名…
   en: Rename…
@@ -635,6 +649,9 @@ explorer.command.new_file:
 explorer.operation.delete_failed:
   zh-CN: 删除失败
   en: Couldn’t delete
+explorer.operation.force_delete_failed:
+  zh-CN: rm -rf 强制删除失败
+  en: Force delete with rm -rf failed
 explorer.operation.rename_failed:
   zh-CN: 重命名失败
   en: Couldn’t rename

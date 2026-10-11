@@ -50,6 +50,11 @@ pub enum SftpCommand {
         request_id: u64,
         operation: RemoteOperation,
     },
+    /// 在同一 SSH 连接上执行远端 rm -rf，使用 Operated 返回结果。
+    ForceDelete {
+        request_id: u64,
+        paths: Vec<RemotePath>,
+    },
     /// Read a whole text file for the editor; answered by `FileRead`. Runs
     /// alongside listings and transfers, like an operation.
     ReadFile {

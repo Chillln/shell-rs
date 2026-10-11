@@ -134,18 +134,22 @@ async fn run(
     .and_then(|result| result);
     let (handle, _) = connected.map_err(|error| describe_failure(&error, *lock(&seen), config))?;
 
-    let result = run_on(&handle, command, output).await;
+    let result = run_on_connection(&handle, command, output).await;
     let _ = handle
         .disconnect(russh::Disconnect::ByApplication, "command finished", "en")
         .await;
     result
 }
 
-async fn run_on(
+/// 在现有 SSH 连接上新开 exec 通道，不重复认证。
+pub(crate) async fn run_on_connection<O>(
     handle: &super::SshHandle,
     command: &str,
-    output: &mut dyn FnMut(ExecStream, &[u8]) -> io::Result<()>,
-) -> Result<ExecExit, ExecError> {
+    output: &mut O,
+) -> Result<ExecExit, ExecError>
+where
+    O: FnMut(ExecStream, &[u8]) -> io::Result<()> + ?Sized,
+{
     let channel_error = |error: russh::Error| {
         ExecError::new(
             ExecErrorKind::Connect,
