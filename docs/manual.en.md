@@ -102,7 +102,7 @@ Click the credentials (key) icon in the title bar and the left sidebar switches 
 
 ## Settings
 
-The “Settings” button at the bottom of the sidebar, or ⌘, (Ctrl+, on Windows and Linux), opens a “Settings” tab in the center area; if it’s already open, it switches to that tab instead of opening another. The settings page has two columns: on the left the categories (Appearance, Terminal, Highlighting, Keyboard shortcuts, External CLI, General, About), with a search box at the top and a width you can drag; on the right the settings of the chosen category. Changes take effect at once and are saved in `settings.json` in the data folder.
+The “Settings” button at the bottom of the sidebar, or ⌘, (Ctrl+, on Windows and Linux), opens a “Settings” tab in the center area; if it’s already open, it switches to that tab instead of opening another. The settings page has two columns: on the left the categories (Appearance, Terminal, Highlighting, Keyboard shortcuts, External CLI, General), with a search box at the top and a width you can drag; on the right the settings of the chosen category. Changes take effect at once and are saved in `settings.json` in the data folder. Update and analytics options from older settings files are ignored; ShellRS deletes the old `analytics.json` cache at startup.
 
 - **Appearance → Interface → Language**: System, 简体中文 or English. The default is System: Simplified Chinese when the system language is Chinese, English for any other language. Changes apply at once, without a restart: the text in the window, open tabs and search box hints all switch to the new language; prompts already written into terminals and notifications already shown stay as they were. The external CLI’s output uses this language too.
 - **Appearance → Interface → Appearance**: Dark, Light or System, System by default; System switches along with the system’s light and dark mode. The theme button in the title bar also changes this setting.
@@ -117,7 +117,6 @@ The “Settings” button at the bottom of the sidebar, or ⌘, (Ctrl+, on Windo
   - Shortcuts in the SFTP file list and the image preview, and fixed keys such as Enter, the arrow keys, Tab and Esc, aren’t changed here.
 - **External CLI**: see the next section.
 - **General → Window**: “Remember window size” restores the last window size and whether it was maximized, and “Remember window position” puts the window back on the screen and in the place it last was. Both are on by default and take effect at the next launch. If that screen is gone, or the window would be mostly off screen, it opens in the middle of the screen; a window larger than the screen shrinks to fit. Full screen isn’t remembered: the window comes back at its size from before full screen. The window’s size and position are recorded in `window.json` in the data folder as it moves.
-- **About**: the “Updates” group, with the current version and checking for updates, the update channel and automatic updates (see “Download and updates”); “Send anonymous usage statistics” in the “Privacy” group, on by default (see “Privacy”); and “Website” in the “ShellRS” group, which opens shellrs.com in your browser.
 
 ## External CLI
 
@@ -130,7 +129,7 @@ In Settings → External CLI:
   - macOS: links it to `/usr/local/bin/shellrs`; if that folder isn’t writable, the system asks for authorization.
   - Linux: links it to `~/.local/bin/shellrs`.
   - On macOS and Linux, “Remove” deletes only a link that points to shellrs; other files with the same name are left alone.
-  - Windows: a GUI app has no console, so the command is a separate console program, `shellrs-cli.exe` (next to `shellrs.exe`). “Install” copies it to `%LOCALAPPDATA%\ShellRS\bin\shellrs.exe` and adds that folder to the current user’s PATH (no administrator needed); terminals and agents find it once they’re reopened. After ShellRS updates, it refreshes this copy when it starts; when it can’t, “Update” appears. The copy can be updated even while it’s in use. “Remove” deletes the copy and takes the folder off the PATH.
+  - Windows: a GUI app has no console, so the command is a separate console program, `shellrs-cli.exe` (next to `shellrs.exe`). “Install” copies it to `%LOCALAPPDATA%\ShellRS\bin\shellrs.exe` and adds that folder to the current user’s PATH (no administrator needed); terminals and agents find it once they’re reopened. After a newer version is installed, ShellRS refreshes this copy when it starts; when it can’t, “Update” appears. The copy can be updated even while it’s in use. “Remove” deletes the copy and takes the folder off the PATH.
 - **Agent Skills**: writes the skill that teaches agents to use `shellrs` to the standard folder (`~/.agents/skills`) or to the skills folder of Codex, Claude Code, OpenCode or WorkBuddy; when the content differs from the current version, “Update” appears. “Copy skills” copies the whole skill to the clipboard.
 
 Commands (`shellrs --help` has the full details):
@@ -400,49 +399,12 @@ When a file name can’t be represented exactly, ShellRS reports an error. The r
 
 **Not implemented yet: folder sync in SFTP tabs (the external CLI’s `shellrs sync` can sync), a foreground transfer progress dialog, reordering the queue, filtering, finding files, a folder tree, and keeping the Dock layout.**
 
-## Download and updates
+## Download and install
 
-Packages are on [GitHub Releases](https://github.com/since2006/shell-rs/releases):
+Packages are available on [GitHub Releases](https://github.com/Chillln/shell-rs/releases). ShellRS does not check for or install updates in the app; install a newer version with the package for your platform. Before a database schema upgrade, ShellRS saves `shellrs.db.v<old version>.bak`. To return to an older version, rename the backup to `shellrs.db`.
 
-| System | First install | Automatic updates |
-|---|---|---|
-| macOS (one package for Apple Silicon and Intel) | DMG; drag ShellRS into Applications | Yes |
-| Windows x64 | Setup program, which installs for the current user into `%LOCALAPPDATA%\Programs\ShellRS`, with no administrator rights needed | Yes |
-| Linux x64 | AppImage | Yes |
-
-ShellRS checks for a new version 30 seconds after it starts, then every 6 hours. When there is one, it downloads and verifies it in the background, and then a green update button appears at the top right of the title bar. Click it: “What’s new” opens the changelog on the website, and “Restart to update” switches to the new version and reopens. Restarting closes open connections and stops transfers (keeping their progress for resuming) and port forwards; the dialog lists exactly which.
-
-“Updates” in “Settings › About” has just three rows:
-
-- **Current version**: below it, the current state (up to date, downloading, downloaded and so on); at the right, the version number and a button, normally “Check for updates”, which becomes “Restart to update…” once an update is downloaded. The build number and platform are in the version number’s tooltip.
-- **Update channel**: Stable is for everyday use; Beta gets test versions early, and stable releases too when they come out. After you switch, ShellRS checks the new channel right away (with automatic updates off, it waits until you check by hand).
-- **Automatic updates**: when this is off, ShellRS goes online only when you check by hand, and when it finds a new version, you decide whether to download it.
-
-- **Verification**: the update manifest is signed with ShellRS’s release key, and the package is checked against the size and SHA-256 in the manifest; if any step doesn’t match, nothing is installed. On macOS, the new version’s developer signature is checked as well.
-- **Privacy**: checking for updates sends only ShellRS’s version number, the operating system and the CPU architecture, nothing that could identify this computer or you. For anonymous usage statistics, see “Privacy”.
-- **When automatic updates aren’t possible**: when ShellRS runs straight from the DMG or outside the Applications folder, you can’t write to where it’s installed, on Linux it isn’t run as the AppImage, or it’s a development build you compiled yourself. The About page then says why, and offers “Open download page” when a new version is out.
-- **Going back to an older version**: before the database is upgraded to a new schema, it’s backed up as `shellrs.db.v<old version>.bak`. An older version refuses to open a database with a newer schema, so as not to mess up data a newer version saved; to go back, rename the backup to `shellrs.db`.
-
-## Privacy
-
-ShellRS never sends hosts, credentials, session content, commands, file names or paths, or any identifier that could identify this computer or you. Only these two things go online (besides connecting to your hosts):
-
-- **Checking for updates**: sends only ShellRS’s version number, the operating system and the CPU architecture; see “Download and updates”.
-- **Anonymous usage statistics**: sent to [Aptabase](https://aptabase.com) to learn how many installs there are, how many devices use ShellRS each day, how the versions are spread, and which features are used most. “Send anonymous usage statistics” in “Settings › About › Privacy” is on by default; turn it off and nothing more is sent, and the counts collected on this computer are cleared too.
-
-Every statistics event carries ShellRS’s version number and the operating system’s name and version (such as macOS 15.1, Windows 10.0.22631, Ubuntu 24.04). There are only four events:
-
-| Event | When it’s sent |
+| System | Installation |
 |---|---|
-| `app_installed` | Once, on the first launch. The data folder records that it was reported; a different data folder, or deleting it, reports it again |
-| `app_started` | Every launch |
-| `app_active` | The first time each day (UTC) the window comes to the front; not again on the day ShellRS started. On macOS, a closed window with ShellRS left in the background doesn’t count |
-| `usage` | How many times each feature was used: once 4 hours have passed since the first use, summed up into one event at the next launch, activation or use |
-
-The first three carry these settings and counts, each with a fixed set of possible values: CPU architecture, appearance, interface language, light and dark themes (names of built-in themes), whether the interface matches the theme, whether highlighting, the external CLI and automatic updates are on, the update channel, whether any shortcut was changed, and how many hosts, credentials, port forwards and snippets are saved (only as a band: 0, 1-5, 6-20, 21-100, 100+).
-
-`usage` has only counts, no content. It counts: SSH terminals connected (also counted separately for jump hosts, proxies, credentials, no password, quick connections and external connections), SFTP connected (also counted for quick connections and external connections), local terminals, port forwards started (local, remote, dynamic), upload and download batches, the editor opening local and remote files, previews of images and Markdown, opening each of the seven right sidebar tools, snippets and history commands sent to the terminal, terminal find, notifications (program, bell, keyword), the external CLI’s `exec`, `upload`, `download`, `sync`, `hosts` and `credentials` commands, and turning highlighting and the external CLI on and off.
-
-- Counts are first kept in `analytics.json` in the data folder, so quitting doesn’t lose them, and they’re sent later. Being offline or on an intranet doesn’t get in the way: when sending fails, ShellRS waits 1 minute, then doubles the wait each time up to 6 hours, and retries only while you’re using ShellRS, sending no requests while it’s idle.
-- Aptabase infers the country and region from the request’s IP address but doesn’t store the IP. It tells devices apart by a hash of the IP and User-Agent with a random salt that changes every day, so it can’t follow the same device across days.
-- Development builds you compile yourself don’t send statistics, and neither does the external CLI (the `shellrs` command) itself.
+| macOS (Apple Silicon / Intel) | Download the matching DMG and drag ShellRS into Applications |
+| Windows x64 | Run the per-user setup program |
+| Linux x64 | Run the AppImage |

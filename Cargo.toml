@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 description = "SSH client and host manager: terminal, SFTP, port forwarding"
 license = "GPL-3.0-only"
-repository = "https://github.com/since2006/shell-rs"
+repository = "https://github.com/Chillln/shell-rs"
 default-run = "shellrs"
 
 # The app. On macOS and Linux it doubles as the `shellrs` command when
@@ -78,20 +78,6 @@ percent-encoding = "2"
 zeroize = "1"
 keyring = "4"
 trash = "5"
-# Online update: the signed manifest, its versions and the downloads. The
-# default features keep rustls with the OS trust store and the system proxy
-# (a GUI app started from Finder or the Start menu has no HTTPS_PROXY).
-minisign-verify = "0.2"
-reqwest = { version = "0.13", features = ["blocking"] }
-semver = { version = "1", features = ["serde"] }
-# 匿名使用统计: the system's name and version for Aptabase, as its own Tauri
-# plugin reads them.
-os_info = { version = "3", default-features = false }
-
-[target.'cfg(unix)'.dependencies]
-# `access(2)`: whether the folder ShellRS runs from can take its update.
-libc = "0.2"
-
 # The Dock icon when running outside an app bundle (`cargo run`). GPUI
 # already builds these crates.
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -125,7 +111,6 @@ winresource = "0.1"
 tokio = { version = "1", features = ["process", "test-util"] }
 gpui-kit = { version = "0.6.1", features = ["test-support"] }
 tempfile = "3"
-minisign = "0.7"
 
 # What the release workflow ships: smaller and faster than the default, at
 # the cost of a longer build.

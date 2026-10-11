@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/since2006/shell-rs/releases"><img src="https://img.shields.io/github/v/release/since2006/shell-rs?include_prereleases&label=release" alt="Release"></a>
+  <a href="https://github.com/Chillln/shell-rs/releases"><img src="https://img.shields.io/github/v/release/Chillln/shell-rs?include_prereleases&label=release" alt="Release"></a>
   <a href="#许可证"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License: GPL-3.0"></a>
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platform: macOS | Windows | Linux">
   <img src="https://img.shields.io/badge/rust-1.98-orange" alt="Rust 1.98">
@@ -24,6 +24,8 @@
 </picture>
 
 ## 简介
+
+> **说明**：本项目为 [Chillln/shell-rs](https://github.com/Chillln/shell-rs) 个人自用二开项目（Fork 自 [since2006/shell-rs](https://github.com/since2006/shell-rs)），移除了内置自动更新与数据收集等非必要逻辑，专注简洁高效的本地体验。
 
 ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SFTP 文件管理、SSH 端口转发放进同一个跨平台应用，JumpServer 等堡垒机也可以像调用 Xshell、WinSCP 一样调用它。它用 Rust 编写，界面基于 Zed 编辑器的 GPU 加速 UI 框架 GPUI（通过 [gpui-kit](https://gpui-kit.com)），不依赖 Electron 或 JVM。
 
@@ -85,11 +87,9 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 - `shellrs hosts` / `credentials` / `exec` / `upload` / `download` / `sync`：管理主机和凭据、执行命令、传输和同步文件。由正在运行的 ShellRS 代为登录，命令本身不读密码和私钥。
 - 在设置页一键把 `shellrs` 放进 PATH，并为 Claude Code、Codex、OpenCode、WorkBuddy 安装 Agent Skill。
 
-**安全与更新**
+**安全**
 
 - 秘密只进系统钥匙串；主机信任记录存在 ShellRS 自己的 `known_hosts` 里，不改动 `~/.ssh`。
-- 在线升级：更新清单经 minisign 签名，安装包按 SHA-256 校验；后台下载，重启或退出时安装。分稳定版和 Beta 两个渠道，检查更新只发送版本号、系统和 CPU 架构。
-- 匿名使用统计：经 Aptabase 只发送版本、系统、CPU 架构和各功能的使用次数，不含主机、凭据、命令或任何标识，可在「设置 › 关于」关闭。详见[使用手册](docs/manual.md#隐私)。
 
 ## 截图
 
@@ -115,7 +115,7 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 
 ## 下载
 
-到官网 [shellrs.com/download](https://shellrs.com/download) 下载，页面会按你的系统给出对应的安装包；也可以到 GitHub [Releases](https://github.com/since2006/shell-rs/releases) 下载。Beta 版在 Releases 里标为 Pre-release，想提前用上新功能，可以在「设置 › 关于」里把更新渠道切到 Beta。
+从 GitHub [Releases](https://github.com/Chillln/shell-rs/releases) 下载对应平台的安装包。Beta 版在 Releases 中标为 Pre-release。应用内不再检查或安装更新。
 
 | 系统 | 安装包 | 说明 |
 | --- | --- | --- |
@@ -155,7 +155,7 @@ shellrs sync <ID> ./dist /opt/app --delete         # 同步目录，没变的文
 需要先装 [rustup](https://rustup.rs)。仓库里的 `rust-toolchain.toml` 固定了 Rust 1.98.1，第一次构建时会自动安装。
 
 ```sh
-git clone https://github.com/since2006/shell-rs.git
+git clone https://github.com/Chillln/shell-rs.git
 cd shell-rs
 cargo run
 ```
@@ -181,7 +181,7 @@ cargo run
 
 ## 参与贡献
 
-欢迎提交 [Issue](https://github.com/since2006/shell-rs/issues) 和 Pull Request。架构说明和代码约定见 [CLAUDE.md](CLAUDE.md)。提交前请确认下面三条都通过：
+欢迎提交 [Issue](https://github.com/Chillln/shell-rs/issues) 和 Pull Request。架构说明和代码约定见 [CLAUDE.md](CLAUDE.md)。提交前请确认下面三条都通过：
 
 ```sh
 cargo fmt --check
