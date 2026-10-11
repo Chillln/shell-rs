@@ -156,8 +156,12 @@ impl SftpClient {
         )?)
     }
     /// 使用 SFTP 所在 SSH 连接的独立 exec 通道执行已确认的强制删除。
-    pub async fn force_delete(&self, paths: &[RemotePath]) -> Result<()> {
-        let command = operations::force_delete_command(paths)?;
+    pub async fn force_delete(
+        &self,
+        paths: &[RemotePath],
+        confirmation: Option<&str>,
+    ) -> Result<()> {
+        let command = operations::force_delete_command(paths, confirmation)?;
         let ssh = self
             .ssh
             .as_ref()

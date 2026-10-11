@@ -6,6 +6,8 @@ use super::*;
 pub type FakeFiles = Arc<Mutex<std::collections::BTreeMap<String, (Vec<u8>, u32)>>>;
 /// The editor's writes: path, bytes and the stamp the file had to have.
 pub type FakeWrites = Arc<Mutex<Vec<(String, Vec<u8>, Option<FileStamp>)>>>;
+/// 强制删除请求及其人工输入的路径。
+pub type FakeForceDeletes = Arc<Mutex<Vec<(Vec<RemotePath>, Option<String>)>>>;
 
 #[derive(Default)]
 pub struct FakeSftpProvider {
@@ -13,7 +15,7 @@ pub struct FakeSftpProvider {
     pub downloads: Arc<Mutex<Vec<shellrs::sftp::DownloadRequest>>>,
     pub operations: Arc<Mutex<Vec<shellrs::sftp::RemoteOperation>>>,
     /// 已确认并发往远端 SSH 通道的强制删除路径。
-    pub force_deletes: Arc<Mutex<Vec<Vec<RemotePath>>>>,
+    pub force_deletes: FakeForceDeletes,
     pub events: Arc<Mutex<Vec<async_channel::Sender<SftpEvent>>>>,
     /// When set, the next connection waits for a message before it is up.
     pub hold_connection: Arc<Mutex<Option<mpsc::Receiver<()>>>>,
@@ -87,7 +89,7 @@ pub struct FakeSftpTransport {
     pub requests: Arc<Mutex<Vec<UploadRequest>>>,
     pub downloads: Arc<Mutex<Vec<shellrs::sftp::DownloadRequest>>>,
     pub operations: Arc<Mutex<Vec<shellrs::sftp::RemoteOperation>>>,
-    pub force_deletes: Arc<Mutex<Vec<Vec<RemotePath>>>>,
+    pub force_deletes: FakeForceDeletes,
     pub events: Arc<Mutex<Vec<async_channel::Sender<SftpEvent>>>>,
     pub hold: Option<mpsc::Receiver<()>>,
     pub reconnects: Arc<Mutex<usize>>,
@@ -151,8 +153,15 @@ impl SftpTransport for FakeSftpTransport {
                         },
                     })?;
                 }
-                SftpCommand::ForceDelete { request_id, paths } => {
-                    self.force_deletes.lock().unwrap().push(paths);
+                SftpCommand::ForceDelete {
+                    request_id,
+                    paths,
+                    confirmation,
+                } => {
+                    self.force_deletes
+                        .lock()
+                        .unwrap()
+                        .push((paths, confirmation));
                     events.send_blocking(SftpEvent::Operated {
                         request_id,
                         result: Ok(()),

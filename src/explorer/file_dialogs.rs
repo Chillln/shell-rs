@@ -3,6 +3,7 @@
 use super::{ExplorerPanel, NewEntryKind, PaneOperation};
 use crate::app::ExplorerCommand;
 use crate::i18n::{t, tn};
+use crate::sftp::{RemotePath, delete_confirmation};
 use crate::shared::{commit_footer, dismiss_form_error, form_error_notification};
 use gpui_kit::component::{
     Sizable as _, WindowExt as _,
@@ -10,6 +11,7 @@ use gpui_kit::component::{
     dialog::DialogButtonProps,
     form::{Field, Form},
     input::{Input, InputState},
+    notification::Notification,
     v_flex,
 };
 use gpui_kit::*;
@@ -66,57 +68,7 @@ impl Render for NameForm {
 impl ExplorerPanel {
     /// 先展示远端目录与不可恢复的后果，再交给 SSH 通道执行强制删除。
     pub(super) fn confirm_force_delete(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let names = self.remote.read(cx).selected_names(cx);
-        if names.is_empty() || !self.can_modify(true, cx) || window.has_active_dialog(cx) {
-            return;
-        }
-        let directory = self.remote.read(cx).path();
-        let title = if let [name] = names.as_slice() {
-            t!("explorer.force_delete.title_one", name = name)
-        } else {
-            tn!("explorer.force_delete.title_several", names.len())
-        };
-        let description = t!("explorer.force_delete.description", directory = directory);
-        let sender = self.sender();
-        let focus = window.focused(cx);
-        window.open_alert_dialog(cx, move |dialog, _, _| {
-            dialog
-                .title(title.clone())
-                .description(description.clone())
-                .button_props(
-                    DialogButtonProps::default()
-                        .ok_text(t!("explorer.command.force_delete"))
-                        .ok_variant(ButtonVariant::Danger)
-                        .cancel_text(t!("common.cancel")),
-                )
-                .show_cancel(true)
-                .on_cancel({
-                    let focus = focus.clone();
-                    move |_, window, cx| {
-                        if let Some(focus) = &focus {
-                            window.focus(focus, cx);
-                        }
-                        true
-                    }
-                })
-                .on_ok({
-                    let (sender, focus, names) = (sender.clone(), focus.clone(), names.clone());
-                    move |_, window, cx| {
-                        sender.send(
-                            ExplorerCommand::Operate {
-                                remote: true,
-                                operation: PaneOperation::ForceDelete(names.clone()),
-                            },
-                            window,
-                            cx,
-                        );
-                        if let Some(focus) = &focus {
-                            window.focus(focus, cx);
-                        }
-                        true
-                    }
-                })
-        });
+        self.confirm_selected_delete(true, true, window, cx);
     }
 
     /// 删除: confirm with the scope and consequence, then delete. Local
@@ -127,53 +79,138 @@ impl ExplorerPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        self.confirm_selected_delete(remote, false, window, cx);
+    }
+
+    /// 两种远端删除共用路径保护；高风险项目还要输入完整路径。
+    fn confirm_selected_delete(
+        &mut self,
+        remote: bool,
+        force: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let names = self.pane(remote).read(cx).selected_names(cx);
         if names.is_empty() || !self.can_modify(remote, cx) || window.has_active_dialog(cx) {
             return;
         }
+        let directory = self.pane(remote).read(cx).path();
+        let required = if remote {
+            let paths = RemotePath::new(&directory).and_then(|directory| {
+                names
+                    .iter()
+                    .map(|name| directory.join(name))
+                    .collect::<anyhow::Result<Vec<_>>>()
+            });
+            match paths.and_then(|paths| delete_confirmation(&paths)) {
+                Ok(required) => required,
+                Err(error) => {
+                    window.push_notification(
+                        Notification::error(format!("{error:#}"))
+                            .title(t!("explorer.operation.delete_blocked")),
+                        cx,
+                    );
+                    return;
+                }
+            }
+        } else {
+            None
+        };
         let title = if let [name] = names.as_slice() {
-            t!("explorer.delete.title_one", name = name)
+            if force {
+                t!("explorer.force_delete.title_one", name = name)
+            } else {
+                t!("explorer.delete.title_one", name = name)
+            }
+        } else if force {
+            tn!("explorer.force_delete.title_several", names.len())
         } else {
             tn!("explorer.delete.title_several", names.len())
         };
-        let description = if remote {
+        let description = if force {
+            t!("explorer.force_delete.description", directory = directory)
+        } else if remote {
             t!("explorer.delete.remote")
         } else if cfg!(windows) {
             t!("explorer.delete.recycle_bin")
         } else {
             t!("explorer.delete.trash")
         };
+        let input = required
+            .as_ref()
+            .map(|_| cx.new(|cx| InputState::new(window, cx)));
         let sender = self.sender();
         let focus = window.focused(cx);
         window.open_alert_dialog(cx, move |dialog, _, _| {
-            dialog
+            let dialog = dialog
                 .title(title.clone())
                 .description(description.clone())
                 .button_props(
                     DialogButtonProps::default()
-                        .ok_text(t!("common.delete"))
+                        .ok_text(if force {
+                            t!("explorer.command.force_delete")
+                        } else {
+                            t!("common.delete")
+                        })
                         .ok_variant(ButtonVariant::Danger)
                         .cancel_text(t!("common.cancel")),
                 )
-                .show_cancel(true)
-                .on_cancel({
-                    let focus = focus.clone();
+                .show_cancel(true);
+            let dialog = if let (Some(required), Some(input)) = (&required, &input) {
+                dialog.child(
+                    Form::new().child(
+                        Field::new()
+                            .label(t!("explorer.delete.type_path", path = required))
+                            .required(true)
+                            .child(Input::new(input).id("delete-path-confirmation").small()),
+                    ),
+                )
+            } else {
+                dialog
+            };
+            dialog
+                .on_ok({
+                    let (sender, names, required, input) = (
+                        sender.clone(),
+                        names.clone(),
+                        required.clone(),
+                        input.clone(),
+                    );
                     move |_, window, cx| {
-                        if let Some(focus) = &focus {
-                            window.focus(focus, cx);
+                        if let (Some(required), Some(input)) = (&required, &input)
+                            && input.read(cx).value().as_ref() != required
+                        {
+                            window.push_notification(
+                                form_error_notification(t!(
+                                    "sftp.error.delete_confirmation",
+                                    path = required
+                                )),
+                                cx,
+                            );
+                            return false;
                         }
+                        let operation = if force {
+                            PaneOperation::ForceDelete {
+                                names: names.clone(),
+                                confirmation: required.clone(),
+                            }
+                        } else {
+                            PaneOperation::Delete {
+                                names: names.clone(),
+                                confirmation: required.clone(),
+                            }
+                        };
+                        sender.send(ExplorerCommand::Operate { remote, operation }, window, cx);
                         true
                     }
                 })
-                .on_ok({
-                    let (sender, focus, names) = (sender.clone(), focus.clone(), names.clone());
+                .on_close({
+                    let focus = focus.clone();
                     move |_, window, cx| {
-                        let operation = PaneOperation::Delete(names.clone());
-                        sender.send(ExplorerCommand::Operate { remote, operation }, window, cx);
+                        dismiss_form_error(window, cx);
                         if let Some(focus) = &focus {
                             window.focus(focus, cx);
                         }
-                        true
                     }
                 })
         });

@@ -241,13 +241,20 @@ impl SshSftpTransport {
                                     .await;
                             });
                         }
-                        SftpCommand::ForceDelete { request_id, paths } => {
+                        SftpCommand::ForceDelete {
+                            request_id,
+                            paths,
+                            confirmation,
+                        } => {
                             let shared = client.clone();
                             let connected = client.read().await.clone();
                             let events = events.clone();
                             tokio::spawn(async move {
                                 let result = match connected {
-                                    Some(connected) => match connected.force_delete(&paths).await {
+                                    Some(connected) => match connected
+                                        .force_delete(&paths, confirmation.as_deref())
+                                        .await
+                                    {
                                         Ok(()) => Ok(()),
                                         Err(error) => {
                                             drop_broken(&shared, &connected, &events, &error).await;

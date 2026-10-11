@@ -18,6 +18,7 @@ pub enum RemoteOperation {
     /// Delete files, links, and directories with everything inside them.
     Delete {
         paths: Vec<RemotePath>,
+        confirmation: Option<String>,
     },
     /// Rename without replacing an existing item.
     Rename {
@@ -54,6 +55,7 @@ pub enum SftpCommand {
     ForceDelete {
         request_id: u64,
         paths: Vec<RemotePath>,
+        confirmation: Option<String>,
     },
     /// Read a whole text file for the editor; answered by `FileRead`. Runs
     /// alongside listings and transfers, like an operation.

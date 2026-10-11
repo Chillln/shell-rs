@@ -18,8 +18,14 @@ use std::path::{Path, PathBuf};
 /// current directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PaneOperation {
-    Delete(Vec<String>),
-    ForceDelete(Vec<String>),
+    Delete {
+        names: Vec<String>,
+        confirmation: Option<String>,
+    },
+    ForceDelete {
+        names: Vec<String>,
+        confirmation: Option<String>,
+    },
     Rename {
         from: String,
         to: String,
@@ -49,8 +55,8 @@ pub(super) struct PendingOperation {
 impl PaneOperation {
     fn failure_title(&self) -> fn() -> SharedString {
         match self {
-            PaneOperation::Delete(_) => || t!("explorer.operation.delete_failed"),
-            PaneOperation::ForceDelete(_) => || t!("explorer.operation.force_delete_failed"),
+            PaneOperation::Delete { .. } => || t!("explorer.operation.delete_failed"),
+            PaneOperation::ForceDelete { .. } => || t!("explorer.operation.force_delete_failed"),
             PaneOperation::Rename { .. } => || t!("explorer.operation.rename_failed"),
             PaneOperation::Create { .. } => || t!("explorer.operation.create_failed"),
             PaneOperation::Permissions { .. } => || t!("explorer.operation.permissions_failed"),
@@ -72,10 +78,14 @@ impl PaneOperation {
             names.iter().map(|name| directory.join(name)).collect()
         };
         Ok(match self {
-            PaneOperation::Delete(names) => RemoteOperation::Delete {
+            PaneOperation::Delete {
+                names,
+                confirmation,
+            } => RemoteOperation::Delete {
                 paths: paths(names)?,
+                confirmation: confirmation.clone(),
             },
-            PaneOperation::ForceDelete(_) => unreachable!("强制删除使用独立的 SSH 命令"),
+            PaneOperation::ForceDelete { .. } => unreachable!("强制删除使用独立的 SSH 命令"),
             PaneOperation::Rename { from, to } => RemoteOperation::Rename {
                 from: directory.join(from)?,
                 to: directory.join(to)?,
@@ -112,8 +122,8 @@ impl PaneOperation {
             names.iter().map(|name| directory.join(name)).collect()
         };
         match self {
-            PaneOperation::Delete(names) => provider.trash(&paths(names)),
-            PaneOperation::ForceDelete(_) => unreachable!("强制删除只适用于远端"),
+            PaneOperation::Delete { names, .. } => provider.trash(&paths(names)),
+            PaneOperation::ForceDelete { .. } => unreachable!("强制删除只适用于远端"),
             PaneOperation::Rename { from, to } => {
                 provider.rename(&directory.join(from), &directory.join(to))
             }
@@ -153,7 +163,7 @@ impl ExplorerPanel {
         if !self.can_modify(remote, cx) {
             return;
         }
-        if !remote && matches!(operation, PaneOperation::ForceDelete(_)) {
+        if !remote && matches!(operation, PaneOperation::ForceDelete { .. }) {
             return;
         }
         let pane = self.pane(remote).clone();
@@ -179,7 +189,10 @@ impl ExplorerPanel {
         pane.update(cx, |pane, cx| pane.set_busy(true, cx));
         if remote {
             let command = match &operation {
-                PaneOperation::ForceDelete(names) => RemotePath::new(&directory)
+                PaneOperation::ForceDelete {
+                    names,
+                    confirmation,
+                } => RemotePath::new(&directory)
                     .and_then(|path| {
                         names
                             .iter()
@@ -189,6 +202,7 @@ impl ExplorerPanel {
                     .map(|paths| SftpCommand::ForceDelete {
                         request_id: id,
                         paths,
+                        confirmation: confirmation.clone(),
                     }),
                 _ => operation
                     .to_remote(&directory)

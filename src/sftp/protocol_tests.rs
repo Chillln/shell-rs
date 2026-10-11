@@ -707,6 +707,7 @@ fn force_delete_uses_exec_on_the_existing_sftp_connection() {
                     home.join("目录 with space").unwrap(),
                     home.join("it's a file").unwrap(),
                 ],
+                confirmation: None,
             })
             .await
             .unwrap();

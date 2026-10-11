@@ -11,6 +11,7 @@ mod download;
 mod journal;
 mod meter;
 mod operations;
+pub use operations::delete_confirmation;
 mod speed;
 mod sync;
 mod upload;

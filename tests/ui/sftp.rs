@@ -1317,6 +1317,106 @@ async fn local_places_are_read_again_with_each_listing(cx: &mut TestAppContext) 
 }
 
 #[gpui_kit::test]
+async fn high_risk_remote_delete_requires_the_full_path(cx: &mut TestAppContext) {
+    use shellrs::app::{ExplorerAction, ExplorerCommand};
+    use shellrs::sftp::RemoteOperation;
+    let provider = Arc::new(FakeSftpProvider::default());
+    let (handle, workspace) = open_workspace_with_sftp(cx, provider.clone());
+    open_test_explorer(cx, handle).await;
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.dispatch_action(
+            Box::new(ExplorerAction::new(
+                ExplorerId(SFTP_TAB),
+                ExplorerCommand::Navigate {
+                    remote: true,
+                    path: "/etc".into(),
+                },
+            )),
+            cx,
+        );
+    })
+    .unwrap();
+    cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
+        window.render_frame(cx);
+        window.find("remote-path").value() == Some("/etc")
+    })
+    .await;
+
+    for command in [
+        ExplorerCommand::ForceDeleteRemote,
+        ExplorerCommand::Delete { remote: true },
+    ] {
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            window
+                .within(("remote-pane", SFTP_TAB))
+                .click("name:目录", cx);
+            window.dispatch_action(
+                Box::new(ExplorerAction::new(ExplorerId(SFTP_TAB), command.clone())),
+                cx,
+            );
+        })
+        .unwrap();
+        cx.run_until_parked();
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            assert!(window.find("delete-path-confirmation").visible());
+            window.click("delete-path-confirmation", cx);
+            window.input("wrong", cx);
+            window.click("ok", cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            assert!(window.find("delete-path-confirmation").visible());
+            assert!(window.find("form-error").visible());
+            window.click("delete-path-confirmation", cx);
+            for _ in 0..5 {
+                window.press("backspace", cx);
+            }
+            window.input("/etc/目录", cx);
+            window.render_frame(cx);
+            assert_eq!(
+                window.find("delete-path-confirmation").value(),
+                Some("/etc/目录")
+            );
+            window.click("ok", cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+        cx.wait_for(handle.into(), Duration::from_secs(2), |_, cx| {
+            let explorer = workspace
+                .read(cx)
+                .explorer(ExplorerId(SFTP_TAB))
+                .unwrap()
+                .read(cx);
+            !explorer.remote().read(cx).is_busy()
+        })
+        .await;
+    }
+    cx.wait_for(handle.into(), Duration::from_secs(2), |_, _| {
+        provider.force_deletes.lock().unwrap().len() == 1
+            && provider.operations.lock().unwrap().len() == 1
+    })
+    .await;
+    assert_eq!(
+        *provider.force_deletes.lock().unwrap(),
+        vec![(
+            vec![RemotePath::new("/etc/目录").unwrap()],
+            Some("/etc/目录".into())
+        )]
+    );
+    assert_eq!(
+        provider.operations.lock().unwrap().as_slice(),
+        &[RemoteOperation::Delete {
+            paths: vec![RemotePath::new("/etc/目录").unwrap()],
+            confirmation: Some("/etc/目录".into()),
+        }]
+    );
+}
+
+#[gpui_kit::test]
 async fn force_delete_requires_confirmation_and_uses_remote_paths(cx: &mut TestAppContext) {
     use shellrs::app::{ExplorerAction, ExplorerCommand};
     let provider = Arc::new(FakeSftpProvider::default());
@@ -1370,7 +1470,7 @@ async fn force_delete_requires_confirmation_and_uses_remote_paths(cx: &mut TestA
     .await;
     assert_eq!(
         *provider.force_deletes.lock().unwrap(),
-        vec![vec![RemotePath::new("/home/tester/目录").unwrap()]]
+        vec![(vec![RemotePath::new("/home/tester/目录").unwrap()], None)]
     );
 }
 
@@ -1409,7 +1509,8 @@ async fn sftp_file_commands_confirm_validate_and_send_one_operation(cx: &mut Tes
     assert_eq!(
         last_operation(),
         Some(RemoteOperation::Delete {
-            paths: vec![path("文件 甲.txt")]
+            paths: vec![path("文件 甲.txt")],
+            confirmation: None,
         })
     );
 

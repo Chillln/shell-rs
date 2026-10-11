@@ -1208,12 +1208,38 @@ fn deleting_a_tree_removes_links_but_never_what_they_point_to() {
                     remote_path("/lone"),
                     remote_path("/missing"),
                 ],
+                confirmation: None,
             },
         )
         .await
         .unwrap();
         let keys: Vec<_> = remote.nodes.borrow().keys().cloned().collect();
         assert_eq!(keys, ["/keep", "/keep/important"]);
+    });
+}
+
+#[test]
+fn sftp_delete_enforces_protected_paths_and_typed_confirmation() {
+    runtime().block_on(async {
+        let remote = Remote::new();
+        remote.dir("/etc", 0o755);
+        remote.dir("/etc/ssh", 0o755);
+        remote.file("/etc/ssh/config", b"data");
+        let remote_ref = &remote;
+        let run = |path: &str, confirmation: Option<&str>| {
+            let operation = RemoteOperation::Delete {
+                paths: vec![remote_path(path)],
+                confirmation: confirmation.map(str::to_string),
+            };
+            async move { super::operations::run(remote_ref, &operation).await }
+        };
+        assert!(run("/etc", Some("/etc")).await.is_err());
+        assert!(run("/etc/ssh", None).await.is_err());
+        assert!(run("/etc/ssh", Some("wrong")).await.is_err());
+        assert!(remote.nodes.borrow().contains_key("/etc/ssh/config"));
+        run("/etc/ssh", Some("/etc/ssh")).await.unwrap();
+        assert!(remote.nodes.borrow().contains_key("/etc"));
+        assert!(!remote.nodes.borrow().contains_key("/etc/ssh"));
     });
 }
 
@@ -1711,6 +1737,7 @@ fn openssh_protocol_downloads_lists_owners_and_changes_files_without_following_l
             &client,
             &RemoteOperation::Delete {
                 paths: vec![path("树")],
+                confirmation: None,
             },
         )
         .await
