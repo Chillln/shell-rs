@@ -45,7 +45,7 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # rust-toolchain.toml picks the toolchain; this installs it with the
       # components it lists before the cache key is computed.
       - run: rustup toolchain install

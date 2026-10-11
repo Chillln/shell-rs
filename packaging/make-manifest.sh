@@ -38,7 +38,7 @@ sha256() {
     fi
 }
 
-# The asset entry of one package: its addresses, size and SHA-256.
+# 构建单个软件包的 asset JSON 条目
 asset() {
     local file="$dist/$1"
     local size
@@ -54,20 +54,39 @@ asset() {
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+# 初始化空的 assets 和 installers 映射
+assets="{}"
+installers="{}"
+
+# 仅当对应平台的软件包实际存在时，才写入清单
+if [ -f "$dist/$mac_arm" ]; then
+    assets=$(jq --argjson a "$(asset "$mac_arm")" '. + {"macos-aarch64": $a}' <<<"$assets")
+    installers=$(jq --arg u "$base/$dmg_arm" '. + {"macos-aarch64": $u}' <<<"$installers")
+fi
+
+if [ -f "$dist/$mac_intel" ]; then
+    assets=$(jq --argjson a "$(asset "$mac_intel")" '. + {"macos-x86_64": $a}' <<<"$assets")
+    installers=$(jq --arg u "$base/$dmg_intel" '. + {"macos-x86_64": $u}' <<<"$installers")
+fi
+
+if [ -f "$dist/$win" ]; then
+    assets=$(jq --argjson a "$(asset "$win")" '. + {"windows-x86_64": $a}' <<<"$assets")
+    installers=$(jq --arg u "$base/$win" '. + {"windows-x86_64": $u}' <<<"$installers")
+fi
+
+if [ -f "$dist/$linux" ]; then
+    assets=$(jq --argjson a "$(asset "$linux")" '. + {"linux-x86_64": $a}' <<<"$assets")
+    installers=$(jq --arg u "$base/$linux" '. + {"linux-x86_64": $u}' <<<"$installers")
+fi
+
 jq -n -j \
     --arg version "$version" \
     --arg channel "$channel" \
     --arg published "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --rawfile notes "$notes" \
     --arg notes_url "https://shellrs.com/changelog#$version" \
-    --argjson mac_arm "$(asset "$mac_arm")" \
-    --argjson mac_intel "$(asset "$mac_intel")" \
-    --argjson win "$(asset "$win")" \
-    --argjson linux "$(asset "$linux")" \
-    --arg dmg_arm "$base/$dmg_arm" \
-    --arg dmg_intel "$base/$dmg_intel" \
-    --arg win_url "$base/$win" \
-    --arg linux_url "$base/$linux" \
+    --argjson assets "$assets" \
+    --argjson installers "$installers" \
     '{
         schema: 1,
         channel: $channel,
@@ -77,18 +96,8 @@ jq -n -j \
         rollout: 1.0,
         notes: $notes,
         notes_url: $notes_url,
-        assets: {
-            "macos-aarch64": $mac_arm,
-            "macos-x86_64": $mac_intel,
-            "windows-x86_64": $win,
-            "linux-x86_64": $linux
-        },
-        installers: {
-            "macos-aarch64": $dmg_arm,
-            "macos-x86_64": $dmg_intel,
-            "windows-x86_64": $win_url,
-            "linux-x86_64": $linux_url
-        }
+        assets: $assets,
+        installers: $installers
     }' >"$work/manifest.json"
 
 printf '%s\n' "${MINISIGN_PASSWORD:-}" | minisign -S \
