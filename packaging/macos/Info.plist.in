@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The bundle's identity. CFBundleIdentifier and the signing team must never
+  change: the keychain grants each saved password to them, so a new
+  identifier would have macOS ask about every password again.
+  bundle.sh fills in @VERSION@ and @BUILD@ (a number that only goes up).
+  The languages are the interface's: the system's own panels (the file
+  picker, the menu bar's standard items) follow whichever of them the user
+  prefers, and the *.lproj folders beside this file translate the
+  descriptions below.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+	</array>
+	<key>CFBundleDisplayName</key>
+	<string>ShellRS</string>
+	<key>CFBundleExecutable</key>
+	<string>shellrs</string>
+	<key>CFBundleIconFile</key>
+	<string>ShellRS</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.shellrs.ShellRS</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>ShellRS</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@BUILD@</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>ShellRS needs the local network to connect to hosts on your LAN.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>© ShellRS</string>
+</dict>
+</plist>

@@ -1,0 +1,178 @@
+[package]
+name = "shellrs"
+version = "0.1.8"
+edition = "2024"
+publish = false
+description = "SSH client and host manager: terminal, SFTP, port forwarding"
+license = "GPL-3.0-only"
+repository = "https://github.com/since2006/shell-rs"
+default-run = "shellrs"
+
+# The app. On macOS and Linux it doubles as the `shellrs` command when
+# started with arguments.
+[[bin]]
+name = "shellrs"
+path = "src/main.rs"
+
+# The `shellrs` command on its own, as a console program: Windows needs it,
+# because the app is a GUI program there and has no console to print to.
+[[bin]]
+name = "shellrs-cli"
+path = "src/bin/shellrs-cli.rs"
+
+[dependencies]
+gpui-kit = { version = "0.6.1", features = [
+    # The built-in editor's syntax highlighting, for what servers hold most:
+    # `tree-sitter` itself brings JSON. Each grammar is compiled C, so the
+    # list stays short.
+    "tree-sitter",
+    "tree-sitter-bash",
+    "tree-sitter-css",
+    "tree-sitter-diff",
+    "tree-sitter-go",
+    "tree-sitter-html",
+    "tree-sitter-javascript",
+    "tree-sitter-lua",
+    "tree-sitter-make",
+    "tree-sitter-markdown",
+    "tree-sitter-php",
+    "tree-sitter-python",
+    "tree-sitter-sql",
+    "tree-sitter-toml",
+    "tree-sitter-yaml",
+] }
+alacritty_terminal = "0.26"
+anyhow = "1"
+async-channel = "2"
+# A terminal's parser thread waits for output only until a synchronized
+# update has to be drawn.
+async-io = "2"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+# Canonical local paths without the `\\?\` prefix std adds on Windows.
+dunce = "1"
+futures = "0.3"
+portable-pty = "0.9"
+rand = "0.9"
+# 关键字高亮: the rules match the terminal's text, not Alacritty's grid
+# search, whose DFA cannot build `\b` and loses `^` after the first line.
+regex = "1"
+russh = "0.63"
+# 多语言: the same crate gpui-kit translates its own text with, so one
+# locale switches both.
+rust-i18n = "4.2"
+russh-sftp = "=3.0.0"
+serde_json = "1"
+sys-locale = "0.3"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "rt", "sync", "time"] }
+unicode-width = "0.2"
+# `ssh://user:password@host:port` links, as bastion hosts open Xshell with.
+url = "2"
+percent-encoding = "2"
+zeroize = "1"
+keyring = "4"
+trash = "5"
+# Online update: the signed manifest, its versions and the downloads. The
+# default features keep rustls with the OS trust store and the system proxy
+# (a GUI app started from Finder or the Start menu has no HTTPS_PROXY).
+minisign-verify = "0.2"
+reqwest = { version = "0.13", features = ["blocking"] }
+semver = { version = "1", features = ["serde"] }
+# 匿名使用统计: the system's name and version for Aptabase, as its own Tauri
+# plugin reads them.
+os_info = { version = "3", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+# `access(2)`: whether the folder ShellRS runs from can take its update.
+libc = "0.2"
+
+# The Dock icon when running outside an app bundle (`cargo run`). GPUI
+# already builds these crates.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "std",
+    "NSApplication",
+    "NSImage",
+    "NSResponder",
+] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-registry = "0.6"
+windows-sys = { version = "0.61", features = [
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_WindowsProgramming",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# The icon in the Windows executables (build.rs).
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["process", "test-util"] }
+gpui-kit = { version = "0.6.1", features = ["test-support"] }
+tempfile = "3"
+minisign = "0.7"
+
+# What the release workflow ships: smaller and faster than the default, at
+# the cost of a longer build.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# Optimize the rendering stack in debug builds (per gpui-kit's installation
+# guide); shellrs itself stays unoptimized and debuggable.
+[profile.dev.package]
+gpui-pre = { opt-level = 3 }
+gpui-pre-platform = { opt-level = 3 }
+gpui-pre-macos = { opt-level = 3 }
+gpui-base = { opt-level = 3 }
+gpui-component = { opt-level = 3 }
+gpui-kit = { opt-level = 3 }
+gpui-kit-assets = { opt-level = 3 }
+cosmic-text = { opt-level = 3 }
+rustybuzz = { opt-level = 3 }
+swash = { opt-level = 3 }
+taffy = { opt-level = 3 }
+ttf-parser = { opt-level = 3 }
+resvg = { opt-level = 3 }
+usvg = { opt-level = 3 }
+zed-font-kit = { opt-level = 3 }
+# Generating an RSA key and deriving a key from a passphrase take seconds
+# unoptimized; the credential form does both.
+rsa = { opt-level = 3 }
+crypto-bigint = { opt-level = 3 }
+crypto-primes = { opt-level = 3 }
+bcrypt-pbkdf = { opt-level = 3 }
+blowfish = { opt-level = 3 }
+# The editor parses whole files of up to 5 MB to highlight them.
+tree-sitter = { opt-level = 3 }
+tree-sitter-bash = { opt-level = 3 }
+tree-sitter-css = { opt-level = 3 }
+tree-sitter-diff = { opt-level = 3 }
+tree-sitter-go = { opt-level = 3 }
+tree-sitter-html = { opt-level = 3 }
+tree-sitter-javascript = { opt-level = 3 }
+tree-sitter-json = { opt-level = 3 }
+tree-sitter-lua = { opt-level = 3 }
+tree-sitter-make = { opt-level = 3 }
+tree-sitter-md = { opt-level = 3 }
+tree-sitter-php = { opt-level = 3 }
+tree-sitter-python = { opt-level = 3 }
+tree-sitter-sequel = { opt-level = 3 }
+tree-sitter-toml-ng = { opt-level = 3 }
+tree-sitter-yaml = { opt-level = 3 }
