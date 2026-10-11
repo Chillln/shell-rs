@@ -84,15 +84,15 @@ const
 // 如果找到则默认使用该盘下的 Programs\ShellRS，否则使用 C 盘当前用户程序目录。
 function GetDefaultDir(Param: String): String;
 var
-  Drive: Char;
+  I: Integer;
   DriveRoot: String;
 begin
-  for Drive := 'D' to 'Z' do
+  for I := Ord('D') to Ord('Z') do
   begin
-    DriveRoot := Drive + ':\';
+    DriveRoot := Chr(I) + ':\';
     if GetDriveType(DriveRoot) = DRIVE_FIXED then
     begin
-      Result := Drive + ':\Programs\ShellRS';
+      Result := Chr(I) + ':\Programs\ShellRS';
       Exit;
     end;
   end;

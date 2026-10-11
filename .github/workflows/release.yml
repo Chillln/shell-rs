@@ -71,9 +71,31 @@ jobs:
       - name: Installer
         shell: pwsh
         run: |
-          # windows-2025 ships Inno Setup 6.
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup -y; }
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          if (-not $iscc) {
+            $candidates = @(
+              "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
+              "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+              "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            )
+            foreach ($path in $candidates) {
+              if (Test-Path $path) { $iscc = $path; break }
+            }
+          }
+          if (-not $iscc) {
+            choco install innosetup -y
+            $candidates = @(
+              "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
+              "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
+              "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            )
+            foreach ($path in $candidates) {
+              if (Test-Path $path) { $iscc = $path; break }
+            }
+          }
+          Write-Host "Using Inno Setup compiler: $iscc"
           & $iscc "/DAppVersion=$env:VERSION" "/DBuildDir=$env:GITHUB_WORKSPACE\target\release" `
             "/O$env:GITHUB_WORKSPACE\dist" packaging\windows\shellrs.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
