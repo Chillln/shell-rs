@@ -25,8 +25,8 @@ AppPublisher=ShellRS
 AppPublisherURL=https://github.com/Chillln/shell-rs
 AppSupportURL=https://github.com/Chillln/shell-rs
 AppUpdatesURL=https://github.com/Chillln/shell-rs/releases
-DefaultDirName={autopf}\ShellRS
-DisableDirPage=auto
+DefaultDirName={code:GetDefaultDir}
+DisableDirPage=no
 DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
@@ -45,11 +45,7 @@ SetupIconFile={#IconFile}
 #endif
 
 [Languages]
-#if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseSimplified.isl")
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
-#else
-Name: "english"; MessagesFile: "compiler:Default.isl"
-#endif
+Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -74,3 +70,33 @@ Filename: "{app}\shellrs.exe"; Description: "{cm:LaunchProgram,ShellRS}"; Flags:
 [UninstallDelete]
 ; Files a later version added, which this uninstaller does not list.
 Type: filesandordirs; Name: "{app}"
+
+[Code]
+// 调用 Windows API GetDriveType 判断磁盘驱动器类型
+function GetDriveType(lpRootPathName: String): Cardinal;
+  external 'GetDriveTypeW@kernel32.dll stdcall';
+
+const
+  DRIVE_FIXED = 3; // 3 代表固定本地硬盘
+
+// 动态检测默认安装路径：
+// 优先检测是否存在除 C 盘以外的可用本地固定硬盘（D 到 Z），
+// 如果找到则默认使用该盘下的 Programs\ShellRS，否则使用 C 盘当前用户程序目录。
+function GetDefaultDir(Param: String): String;
+var
+  Drive: Char;
+  DriveRoot: String;
+begin
+  for Drive := 'D' to 'Z' do
+  begin
+    DriveRoot := Drive + ':\';
+    if GetDriveType(DriveRoot) = DRIVE_FIXED then
+    begin
+      Result := Drive + ':\Programs\ShellRS';
+      Exit;
+    end;
+  end;
+
+  Result := ExpandConstant('{autopf}\ShellRS');
+end;
+
