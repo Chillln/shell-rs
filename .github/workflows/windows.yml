@@ -1,7 +1,4 @@
-# The Windows build, which the Macs this is developed on cannot compile:
-# the whole crate through clippy, the external CLI's tests, including the
-# named pipe between two processes, the updater's, and the local SFTP pane's
-# paths (std canonicalizes to `\\?\C:\…` there).
+# Windows 构建验证完整 crate、外部 CLI 测试、跨进程命名管道和本地 SFTP 路径处理。
 #
 # A push runs it only when it touches code that differs on Windows (the
 # files with `cfg(windows)` and friends), the build script or the
@@ -15,8 +12,6 @@ on:
     branches: ["**"]
     paths:
       - "src/cli/**"
-      - "src/analytics/**"
-      - "src/update/**"
       - "src/app/paths.rs"
       - "src/app/window_hiding.rs"
       - "src/main.rs"
@@ -55,6 +50,5 @@ jobs:
       - uses: ilammy/setup-nasm@v1
       - run: cargo clippy --all-targets -- -D warnings
       - run: "cargo test --lib cli::"
-      - run: "cargo test --lib update::"
       - run: "cargo test --lib sftp::tests::local_listing"
       - run: cargo test --test cli_bin

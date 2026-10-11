@@ -31,18 +31,6 @@ pub fn keys_dir() -> PathBuf {
     data_dir().join("keys")
 }
 
-/// Where updates are downloaded to: the user's cache folder. With
-/// `SHELLRS_DATA_DIR` set it is beside the data instead, so a test or
-/// development instance never shares downloads with the installed app.
-pub fn updates_dir() -> PathBuf {
-    if std::env::var_os(DATA_DIR_ENV).is_some() {
-        return data_dir().join("updates");
-    }
-    dirs::cache_dir()
-        .map(|dir| dir.join("shellrs").join("updates"))
-        .unwrap_or_else(|| data_dir().join("updates"))
-}
-
 /// The interface settings, a small JSON file beside the database.
 pub fn settings_path() -> std::io::Result<PathBuf> {
     let dir = data_dir();
@@ -55,13 +43,6 @@ pub fn settings_path() -> std::io::Result<PathBuf> {
 /// whenever the window moves.
 pub fn window_state_path() -> PathBuf {
     data_dir().join("window.json")
-}
-
-/// What 匿名使用统计 keeps between runs: whether this installation was
-/// reported, and the uses not sent yet. Beside the database, so a fresh
-/// data directory is a fresh installation.
-pub fn analytics_path() -> PathBuf {
-    data_dir().join("analytics.json")
 }
 
 /// Where the running app listens for the `shellrs` command. The command

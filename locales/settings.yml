@@ -9,9 +9,6 @@ settings.appearance.dark:
 settings.appearance.light:
   zh-CN: 浅色
   en: Light
-settings.channel.stable:
-  zh-CN: 稳定版
-  en: Stable
 
 settings.store.unreadable:
   zh-CN: 无法读取设置，本次使用默认设置：%{error}
@@ -52,9 +49,6 @@ settings.category.external_cli:
 settings.category.application:
   zh-CN: 应用
   en: General
-settings.category.about:
-  zh-CN: 关于
-  en: About
 
 settings.appearance.interface:
   zh-CN: 常规
@@ -266,65 +260,6 @@ settings.cli.copy_skills:
 settings.cli.skills_keywords:
   zh-CN: skill,Agent,检查,复制
   en: skill,agent,check,copy
-
-settings.about.updates:
-  zh-CN: 应用更新
-  en: Updates
-settings.about.version:
-  zh-CN: 当前版本
-  en: Current version
-settings.about.version_keywords:
-  zh-CN: 当前版本,检查更新,更新,升级,版本,下载
-  en: current version,check for updates,update,upgrade,version,download
-settings.about.check:
-  zh-CN: 检查更新
-  en: Check for updates
-settings.about.restart:
-  zh-CN: 重启并安装…
-  en: Restart to update…
-settings.about.download_page:
-  zh-CN: 前往下载页
-  en: Open download page
-settings.about.retry_download:
-  zh-CN: 重试下载
-  en: Retry download
-settings.about.download:
-  zh-CN: 下载更新
-  en: Download update
-settings.about.local_build:
-  zh-CN: 本机构建
-  en: Local build
-# The version's tooltip: the build, then the system it is for.
-settings.about.build:
-  zh-CN: "%{build}（%{platform}）"
-  en: "%{build} (%{platform})"
-settings.about.channel:
-  zh-CN: 更新渠道
-  en: Update channel
-settings.about.channel_description:
-  zh-CN: 稳定版适合日常使用，Beta 可提前接收测试版本。
-  en: Stable is for everyday use. Beta gets test versions early.
-settings.about.automatic:
-  zh-CN: 自动升级
-  en: Automatic updates
-settings.about.automatic_description:
-  zh-CN: 检测到新版本后自动下载，下载完成后点击「重启并安装」完成更新。
-  en: A new version downloads by itself. Once it’s ready, click Restart to update.
-settings.about.privacy:
-  zh-CN: 隐私
-  en: Privacy
-settings.about.analytics:
-  zh-CN: 发送匿名使用统计
-  en: Send anonymous usage statistics
-settings.about.analytics_description:
-  zh-CN: 发送应用版本、操作系统/架构，用于评估安装量、版本分布，用于改进 ShellRS。不会发送任何主机、凭据、命令或会话内容。
-  en: Sends the app version, operating system and architecture, to count installs and versions and to improve ShellRS. No host, credential, command or session content is ever sent.
-settings.about.website:
-  zh-CN: 官网
-  en: Website
-settings.about.website_description:
-  zh-CN: 功能介绍、下载和更新内容。
-  en: Features, downloads and what’s new.
 
 settings.highlight.pattern_placeholder:
   zh-CN: 例如：ERROR|WARN 或 failed\s+\d+

@@ -33,9 +33,7 @@ cargo fmt --check
 
 `src/forward/protocol_tests.rs` 用进程内的 SSH 服务器和本机的回显服务测试真实的转发工作线程：三种转发的往返、目标不可达、服务器禁止转发、端口被占用、空闲断线后重连、重试耗尽和停止后的清理，同样只监听 `127.0.0.1` 的随机端口。
 
-`tests/ui/` 里的 UI 测试驱动真实 `Workspace`，通过 `Workspace::new_with_services` 注入 SFTP、本地目录、终端和端口转发服务，不连接用户服务器或真实钥匙串；在线升级的测试给 `workspace.updater()` 注入假的更新服务器和安装器，不联网、不改任何安装。Finder 的系统原生拖放仍需在真实 macOS 窗口中补充人工验收；无头测试覆盖原生文件拖入事件和面板内部拖放。
-
-开发构建（`cargo run`）不检查更新。要在本机走一遍更新流程，用 debug 构建加环境变量 `SHELLRS_UPDATE_CHANNEL=beta` 编译，运行时用 `SHELLRS_UPDATE_URL=http://127.0.0.1:8000/{channel}.json` 指向本地的静态服务器（`python3 -m http.server`），清单用 `packaging/make-manifest.sh` 和自己生成的测试密钥签名，测试公钥放在环境变量 `SHELLRS_UPDATE_PUBLIC_KEY` 里。release 构建不认这两个环境变量。
+`tests/ui/` 里的 UI 测试驱动真实 `Workspace`，通过 `Workspace::new_with_services` 注入 SFTP、本地目录、终端和端口转发服务，不连接用户服务器或真实钥匙串。Finder 的系统原生拖放仍需在真实 macOS 窗口中补充人工验收；无头测试覆盖原生文件拖入事件和面板内部拖放。
 
 上传交互参考 [WinSCP 上传流程](https://winscp.net/eng/docs/task_upload)，协议适配参考 [russh-sftp 请求接口](https://docs.rs/russh-sftp/3.0.0/russh_sftp/client/struct.RawSftpSession.html) 与 [OpenSSH 扩展规范](https://raw.githubusercontent.com/openssh/openssh-portable/master/PROTOCOL)。
 

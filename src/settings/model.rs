@@ -9,7 +9,6 @@ use crate::terminal::{
     DEFAULT_FONT_SIZE, DEFAULT_LINE_HEIGHT, FONT_SIZE_RANGE, HighlightRule, LINE_HEIGHT_RANGE,
     RightClick, TerminalInteraction, TerminalTheme, default_rules,
 };
-use crate::update::Channel;
 
 /// Everything the settings page changes. Each field falls back to its
 /// default when the file does not mention it, so a file written by an older
@@ -25,9 +24,6 @@ pub struct AppSettings {
     /// 终端 → 终端交互.
     pub terminal_interaction: TerminalInteraction,
     pub external_cli: ExternalCliSettings,
-    pub update: UpdateSettings,
-    /// 关于 → 隐私.
-    pub analytics: AnalyticsSettings,
     /// The SFTP 大小 column, switched from the column title's menu rather
     /// than the settings page, as in WinSCP.
     pub file_size_format: FileSizeFormat,
@@ -196,55 +192,6 @@ pub struct ExternalCliSettings {
     /// Whether the `shellrs` command may use the saved hosts. Off until
     /// the user turns it on.
     pub enabled: bool,
-}
-
-/// 关于 → 应用更新.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct UpdateSettings {
-    /// 自动升级: look for a newer ShellRS in the background and download
-    /// it. On unless the user turns it off.
-    pub automatic: bool,
-    /// 更新渠道. A release build starts on the channel it was built for.
-    pub channel: Channel,
-}
-
-impl Default for UpdateSettings {
-    fn default() -> Self {
-        Self {
-            automatic: true,
-            channel: Channel::of_this_build().unwrap_or(Channel::Stable),
-        }
-    }
-}
-
-/// 关于 → 隐私.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct AnalyticsSettings {
-    /// 发送匿名使用统计. On unless the user turns it off.
-    pub enabled: bool,
-}
-
-impl Default for AnalyticsSettings {
-    fn default() -> Self {
-        Self { enabled: true }
-    }
-}
-
-impl Choice for Channel {
-    const ALL: &'static [Self] = &[Self::Stable, Self::Beta];
-
-    fn key(self) -> &'static str {
-        Channel::key(self)
-    }
-
-    fn label(self) -> SharedString {
-        match self {
-            Self::Stable => t!("settings.channel.stable"),
-            Self::Beta => "Beta".into(),
-        }
-    }
 }
 
 impl Choice for RightClick {
@@ -622,40 +569,14 @@ mod tests {
     }
 
     #[test]
-    fn automatic_updates_are_on_unless_the_file_says_otherwise() {
-        let settings: AppSettings = serde_json::from_str("{}").unwrap();
-        assert!(settings.update.automatic);
-        let settings: AppSettings = serde_json::from_str(r#"{"update":{}}"#).unwrap();
-        assert!(settings.update.automatic);
-        let settings: AppSettings =
-            serde_json::from_str(r#"{"update":{"automatic":false}}"#).unwrap();
-        assert!(!settings.update.automatic);
-    }
-
-    #[test]
-    fn usage_statistics_are_sent_unless_the_file_says_otherwise() {
-        let settings: AppSettings = serde_json::from_str("{}").unwrap();
-        assert!(settings.analytics.enabled);
-        let settings: AppSettings = serde_json::from_str(r#"{"analytics":{}}"#).unwrap();
-        assert!(settings.analytics.enabled);
-        let settings: AppSettings =
-            serde_json::from_str(r#"{"analytics":{"enabled":false}}"#).unwrap();
-        assert!(!settings.analytics.enabled);
-    }
-
-    #[test]
-    fn the_update_channel_is_the_builds_until_one_is_chosen() {
-        // A development build has no channel of its own.
-        let settings: AppSettings = serde_json::from_str(r#"{"update":{}}"#).unwrap();
-        assert_eq!(settings.update.channel, Channel::Stable);
-        let settings: AppSettings =
-            serde_json::from_str(r#"{"update":{"channel":"beta"}}"#).unwrap();
-        assert_eq!(settings.update.channel, Channel::Beta);
-        assert_eq!(
-            serde_json::to_value(&settings.update).unwrap()["channel"],
-            "beta"
-        );
-        assert_eq!(Channel::from_key("beta"), Some(Channel::Beta));
+    fn removed_about_settings_are_ignored_when_loading_old_files() {
+        let settings: AppSettings = serde_json::from_str(
+            r#"{"update":{"automatic":true,"channel":"beta"},"analytics":{"enabled":true}}"#,
+        )
+        .unwrap();
+        let saved = serde_json::to_value(&settings).unwrap();
+        assert!(saved.get("update").is_none());
+        assert!(saved.get("analytics").is_none());
     }
 
     #[test]

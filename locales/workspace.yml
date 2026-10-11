@@ -242,16 +242,3 @@ workspace.snippets.delete_category.one:
 workspace.snippets.delete_category.other:
   zh-CN: 分类里的 %{count} 个片段会一起删除。
   en: The %{count} snippets in the category are deleted with it.
-
-workspace.update.done_title:
-  zh-CN: 更新完成
-  en: Update complete
-workspace.update.done:
-  zh-CN: ShellRS 已更新到 %{version}。
-  en: ShellRS is now %{version}.
-workspace.update.failed_title:
-  zh-CN: 更新没有完成
-  en: Update not completed
-workspace.update.failed:
-  zh-CN: 没有装上 %{to}，ShellRS 仍是 %{from}。可以到官网下载安装。
-  en: "%{to} wasn’t installed, so ShellRS is still %{from}. You can download it from the website."

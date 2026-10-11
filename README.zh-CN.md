@@ -126,8 +126,6 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 
 每个安装包都附带 minisign 签名（`.minisig`），另有一份 `SHA256SUMS`。
 
-装好之后不用再手动下载：ShellRS 会在后台检查、下载并校验新版本，标题栏右上角出现提示后点「重启并安装」；不点的话，退出时也会自动装好。直接在 DMG 里运行、没放进「应用程序」文件夹，或者在 Linux 上不是用 AppImage 运行时，无法自动更新。
-
 ## 快速上手
 
 1. 点标题栏的「新建主机…」（⌘N，Windows / Linux 上 Ctrl+N），填写地址、端口和认证方式，密码会存进系统钥匙串。
@@ -166,7 +164,7 @@ cargo run
 
 - [使用手册](docs/manual.md)：每个功能的详细说明和快捷键
 - [开发与测试](docs/development.md)：构建、测试和数据目录
-- [发布流程](docs/release.md)：打包、签名和在线更新的发布步骤
+- [发布流程](docs/release.md)：打包、签名和发布步骤
 - [更新日志](CHANGELOG.md)
 
 ## 路线图

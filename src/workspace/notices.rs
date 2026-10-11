@@ -9,7 +9,6 @@ use gpui_kit::component::{WindowExt as _, notification::Notification};
 use gpui_kit::*;
 
 use super::Workspace;
-use crate::analytics::Counter;
 use crate::app::CenterTab;
 use crate::i18n::t;
 use crate::settings::NotificationSettings;
@@ -140,11 +139,6 @@ impl Workspace {
             return;
         }
         self.notice_times.insert(key, now);
-        self.count(match notice {
-            TerminalNotice::Program { .. } => Counter::NoticeProgram,
-            TerminalNotice::Bell { .. } => Counter::NoticeBell,
-            TerminalNotice::Keyword { .. } => Counter::NoticeKeyword,
-        });
         let (title, body) = notice_text(&tab_title, notice);
         match delivery {
             Delivery::System => cx.show_system_notification(SystemNotification {

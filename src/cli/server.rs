@@ -216,45 +216,6 @@ struct Shared {
     /// only the UI thread can reach a terminal.
     runs: Mutex<VecDeque<PendingRun>>,
     next_change: AtomicU64,
-    /// What kinds of command were served, for 匿名使用统计, until the app
-    /// takes them.
-    usage: Mutex<Vec<CliUse>>,
-}
-
-/// The kind of a `shellrs` command, as 匿名使用统计 counts them: nothing
-/// of what it asked for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CliUse {
-    Exec,
-    ExecTerminal,
-    Upload,
-    Download,
-    Sync,
-    Hosts,
-    Credentials,
-}
-
-impl CliUse {
-    fn of(request: &Request) -> Option<Self> {
-        match request {
-            Request::Exec { .. } => Some(Self::Exec),
-            Request::ExecInTerminal { .. } => Some(Self::ExecTerminal),
-            Request::Upload { .. } => Some(Self::Upload),
-            Request::Download { .. } => Some(Self::Download),
-            Request::Sync { .. } => Some(Self::Sync),
-            Request::List { .. }
-            | Request::ShowHost { .. }
-            | Request::CreateHost { .. }
-            | Request::UpdateHost { .. }
-            | Request::DeleteHost { .. } => Some(Self::Hosts),
-            Request::ListCredentials { .. }
-            | Request::ShowCredential { .. }
-            | Request::CreateCredential { .. }
-            | Request::UpdateCredential { .. }
-            | Request::DeleteCredential { .. } => Some(Self::Credentials),
-            Request::Activate { .. } => None,
-        }
-    }
 }
 
 /// Listens on the CLI socket until dropped. Always listening, even with
@@ -279,7 +240,6 @@ impl CliServer {
             changes: Mutex::new(VecDeque::new()),
             runs: Mutex::new(VecDeque::new()),
             next_change: AtomicU64::new(0),
-            usage: Mutex::new(Vec::new()),
         });
         let listener = listen(endpoint, shared.clone())?;
         Ok(Self {
@@ -347,18 +307,6 @@ impl CliServer {
             .lock()
             .unwrap_or_else(|error| error.into_inner())
             .take()
-    }
-
-    /// The kinds of command served since this was last asked, oldest first.
-    /// Asked on the same timer as `take_activation`.
-    pub fn take_usage(&self) -> Vec<CliUse> {
-        std::mem::take(
-            &mut *self
-                .shared
-                .usage
-                .lock()
-                .unwrap_or_else(|error| error.into_inner()),
-        )
     }
 }
 
@@ -655,13 +603,6 @@ fn respond(
             ErrorCode::NotEnabled,
             t!("cli.server.not_enabled"),
         ));
-    }
-    if let Some(usage) = CliUse::of(&envelope.request) {
-        shared
-            .usage
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .push(usage);
     }
     match envelope.request {
         Request::List { query } => {

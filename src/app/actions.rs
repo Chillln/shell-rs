@@ -143,21 +143,6 @@ gpui_kit::actions!(
         RefreshCliIntegration,
         /// Copy the agent skill's text to the clipboard.
         CopyAgentSkill,
-        /// Look for a newer ShellRS now.
-        CheckForUpdates,
-        /// Download the newer ShellRS that was found.
-        DownloadUpdate,
-        /// Show the newer ShellRS: restarting into it, and where to read
-        /// what changed.
-        ShowUpdate,
-        /// Restart into the downloaded ShellRS.
-        RestartToUpdate,
-        /// Open the page to download ShellRS by hand.
-        OpenDownloadPage,
-        /// Open the website's changelog.
-        OpenChangelog,
-        /// Open the ShellRS website.
-        OpenWebsite,
     ]
 );
 

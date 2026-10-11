@@ -9,15 +9,14 @@ pub use gpui_kit::{
     App, AppContext as _, ClipboardItem, ElementId, Entity, InputEvent as _, MouseButton,
     MouseMoveEvent, TestAppContext, WindowHandle, point, px, size,
 };
-pub use semver::Version;
 pub use shellrs::app::{
-    CenterTab, CheckForUpdates, ClearTerminal, CloseScope, CloseTabs, CollapseAllGroups,
-    ConnectGroup, ConnectHost, CopyCredentialPublicKey, CopyHostAddress, CopyHostId,
-    DeleteCredential, DeleteForward, DeleteGroup, DeleteHost, DisconnectHost, DisconnectTerminal,
-    EditCredential, EditForward, EditHost, ExpandAllGroups, FindInTerminal, FindNextInTerminal,
-    FindPreviousInTerminal, FocusSearch, InstallCliCommand, NewHostInGroup, NewLocalTerminal,
-    OpenExplorer, OpenSettings, ReconnectTerminal, RemoveAgentSkill, RenameGroup, RenameTerminal,
-    StartForward, StopForward, ToggleHostPanel, ToggleToolSidebar,
+    CenterTab, ClearTerminal, CloseScope, CloseTabs, CollapseAllGroups, ConnectGroup, ConnectHost,
+    CopyCredentialPublicKey, CopyHostAddress, CopyHostId, DeleteCredential, DeleteForward,
+    DeleteGroup, DeleteHost, DisconnectHost, DisconnectTerminal, EditCredential, EditForward,
+    EditHost, ExpandAllGroups, FindInTerminal, FindNextInTerminal, FindPreviousInTerminal,
+    FocusSearch, InstallCliCommand, NewHostInGroup, NewLocalTerminal, OpenExplorer, OpenSettings,
+    ReconnectTerminal, RemoveAgentSkill, RenameGroup, RenameTerminal, StartForward, StopForward,
+    ToggleHostPanel, ToggleToolSidebar,
 };
 pub use shellrs::cli::{AgentKind, IntegrationPaths};
 pub use shellrs::connection::{
@@ -46,10 +45,6 @@ pub use shellrs::terminal::{
     RemoteTerminalTransportProvider, SharedTerminalTransportFactory, TerminalFont,
     TerminalLifecycle, TerminalSize, TerminalTransport, TerminalTransportCommand,
     TerminalTransportEvent, TerminalTransportFactory,
-};
-pub use shellrs::update::{
-    Channel, InstallKind, Installer, Relaunch, Release, Staged, TrustedKeys, Unsupported,
-    UpdateError, UpdateFeed, UpdateServices,
 };
 pub use shellrs::workspace::Workspace;
 pub use std::sync::atomic::{AtomicUsize, Ordering};

@@ -7,7 +7,6 @@
 
 mod support;
 
-mod analytics;
 mod cli;
 mod connection;
 mod credential;
@@ -27,5 +26,4 @@ mod shortcuts;
 mod snippets;
 mod terminal;
 mod transfer;
-mod update;
 mod workspace;

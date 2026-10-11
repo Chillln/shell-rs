@@ -9,7 +9,6 @@ use gpui_kit::*;
 
 use super::Workspace;
 use super::front::follow_focus;
-use crate::analytics::Counter;
 use crate::app::{CenterTab, CloseEditor, EditorAction, EditorCommand, EditorShortcut};
 use crate::editor::{EditorId, EditorKey, EditorPanel, EditorPanelEvent, EditorSource};
 use crate::explorer::{ExplorerId, FileLocation};
@@ -73,11 +72,6 @@ impl Workspace {
         let Some(panel) = self.explorers.get(&explorer) else {
             return;
         };
-        self.count(if location.is_remote() {
-            Counter::EditorRemote
-        } else {
-            Counter::EditorLocal
-        });
         let source = match &location {
             FileLocation::Remote(_) => EditorSource::Remote {
                 explorer: panel.downgrade(),

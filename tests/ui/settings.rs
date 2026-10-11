@@ -55,6 +55,8 @@ fn settings_open_from_the_host_list_as_one_tab(cx: &mut TestAppContext) {
         assert!(window.find("settings").visible());
         assert_eq!(window.find("settings").focused(), Some(true));
         assert_eq!(window.find("settings-tab").label(), Some("设置"));
+        assert!(window.try_find("0-6").is_none());
+        assert!(window.try_find("update-available").is_none());
         // Two columns: the first category, 外观, is shown until another is
         // picked. `Settings` names its category rows by position.
         assert_eq!(appearance_dropdown(window, 0).as_deref(), Some("简体中文"));
@@ -112,8 +114,11 @@ fn settings_open_from_the_host_list_as_one_tab(cx: &mut TestAppContext) {
         window.render_frame(cx);
         assert!(window.find("settings").visible());
         assert_eq!(window.find("settings").focused(), Some(true));
-        // ⌘W closes it like any other tab.
+        // 使用当前平台的关闭标签快捷键。
+        #[cfg(target_os = "macos")]
         window.press("cmd-w", cx);
+        #[cfg(not(target_os = "macos"))]
+        window.press("ctrl-w", cx);
     })
     .unwrap();
     cx.run_until_parked();
@@ -454,7 +459,7 @@ fn the_window_settings_are_on_until_turned_off(cx: &mut TestAppContext) {
         cx.update(|cx| workspace.read(cx).settings().read(cx).settings().window)
     };
     in_frame(cx, handle, |window, cx| window.click("open-settings", cx));
-    // 应用 comes right before 关于.
+    // 「应用」是最后一个设置分类。
     in_frame(cx, handle, |window, cx| {
         window.within("settings").click("0-5", cx)
     });

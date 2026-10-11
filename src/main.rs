@@ -28,6 +28,12 @@ fn main() {
     if shellrs::cli::activate_running_app(&shellrs::app::cli_socket_path(), link.clone()) {
         return;
     }
+    // 清理旧版本留下的本地统计缓存，新版本不再采集或发送这些数据。
+    if let Err(error) = std::fs::remove_file(shellrs::app::data_dir().join("analytics.json"))
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        eprintln!("shellrs: 无法删除旧版统计缓存：{error}");
+    }
     let app = gpui_kit::application().with_assets(shellrs::app::AppAssets);
     // macOS: the Dock icon of a ShellRS whose window was closed, which only
     // hid it (see `hide_when_closed`).
@@ -83,9 +89,6 @@ fn main() {
         })
         .detach();
     });
-    // On Windows the event loop ends and `run` returns: an update that is
-    // to be installed now starts its setup, which waits for this process.
-    shellrs::update::start_handed_over();
 }
 
 /// Load the hosts saved on disk. If the database cannot be opened the

@@ -27,8 +27,6 @@ pub enum TerminalPanelEvent {
     Activated(RemoteTerminalId, HostId),
     Closed(RemoteTerminalId, HostId),
     StatusChanged(RemoteTerminalId, HostId),
-    /// Connected, again after each reconnection.
-    Connected(RemoteTerminalId, HostId),
     PromptRequested(RemoteTerminalId, HostId, ConnectionPrompt),
     HostOsDetected(HostId, HostOs),
     Notice(RemoteTerminalId, TerminalNotice),
@@ -88,9 +86,6 @@ impl TerminalPanel {
             cx.subscribe(
                 &terminal,
                 |this, _, event: &TerminalEvent, cx| match event {
-                    TerminalEvent::Started => {
-                        cx.emit(TerminalPanelEvent::Connected(this.id, this.host_id));
-                    }
                     TerminalEvent::PromptRequested(prompt) => {
                         cx.emit(TerminalPanelEvent::PromptRequested(
                             this.id,

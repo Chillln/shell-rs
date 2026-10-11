@@ -8,11 +8,9 @@ use gpui_kit::*;
 
 use crate::app::{
     CatalogIcon, NewLocalTerminal, NewTemporaryConnection, ShowCredentials, ShowForwards,
-    ShowHosts, ShowUpdate, ToggleHostPanel, ToggleTheme,
+    ShowHosts, ToggleHostPanel, ToggleTheme,
 };
 use crate::i18n::t;
-use crate::shared::tinted;
-use crate::update::UpdateBadge;
 
 use super::sidebar::SidebarMode;
 
@@ -22,18 +20,15 @@ use super::sidebar::SidebarMode;
 /// when nothing is focused.
 ///
 /// `sidebar` is what the left dock is showing, or `None` while it is hidden;
-/// `forwards` is how many port forwards are running; `update` is the
-/// newer ShellRS waiting to be installed, when there is one.
+/// `forwards` 是正在运行的端口转发数量。
 pub fn render_title_bar(
     sidebar: Option<SidebarMode>,
     forwards: usize,
-    update: Option<UpdateBadge>,
     target: &FocusHandle,
     cx: &App,
 ) -> TitleBar {
     let dark = cx.theme().is_dark();
-    let (mode, toggle, temporary, new_local, theme, show_update) = (
-        target.clone(),
+    let (mode, toggle, temporary, new_local, theme) = (
         target.clone(),
         target.clone(),
         target.clone(),
@@ -152,26 +147,6 @@ pub fn render_title_bar(
                             new_local.dispatch_action(&NewLocalTerminal, window, cx)
                         }),
                 )
-                .children(update.map(|update| {
-                    // The one coloured button up here, in the colour of
-                    // what it says: the only sign that an update waits.
-                    Button::new("update-available")
-                        .custom(tinted(
-                            if update.trouble {
-                                cx.theme().warning
-                            } else {
-                                cx.theme().success
-                            },
-                            cx,
-                        ))
-                        .small()
-                        .icon(CatalogIcon::CircleArrowUp)
-                        .tooltip(update.label.clone())
-                        .accessibility_label(update.label)
-                        .on_click(move |_, window, cx| {
-                            show_update.dispatch_action(&ShowUpdate, window, cx)
-                        })
-                }))
                 .child(
                     Button::new("theme-toggle")
                         .ghost()

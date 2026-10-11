@@ -47,7 +47,6 @@ icon_assets!(
         RectangleEllipsis,
         FileKey,
         UserRoundKey,
-        CircleArrowUp,
         CodeXml,
         RotateCcwClock,
         Activity,
@@ -75,7 +74,6 @@ icon_assets!(
         ZoomIn,
         ZoomOut,
         Zap,
-        ExternalLink,
         Highlighter,
         GripVertical
     ]
