@@ -124,7 +124,7 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 | Windows x64 | `ShellRS-<版本>-windows-x86_64-setup.exe` | 按当前用户安装，不需要管理员权限。安装程序暂未签名，SmartScreen 拦下时点「更多信息 › 仍要运行」 |
 | Linux x64 | `ShellRS-<版本>-linux-x86_64.AppImage` | `chmod +x` 后直接运行，需要 glibc 2.35 以上（Ubuntu 22.04、Debian 12 及更新的版本） |
 
-每个安装包都附带 minisign 签名（`.minisig`），另有一份 `SHA256SUMS`。
+每个安装包都附带一份 `SHA256SUMS` 校验和。
 
 ## 快速上手
 
