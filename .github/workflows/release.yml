@@ -2,7 +2,7 @@
 #
 #   verify   校验版本标签与 CHANGELOG 章节
 #   windows  构建 Windows Inno Setup 安装包
-#   publish  上传至存储桶并发布 GitHub Release
+#   publish  发布 GitHub Release
 name: release
 
 on:
@@ -53,7 +53,6 @@ jobs:
           name: notes
           path: notes.md
 
-
   windows:
     needs: verify
     runs-on: windows-2025
@@ -85,99 +84,28 @@ jobs:
 
   publish:
     needs: [verify, windows]
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: release
     env:
       VERSION: ${{ needs.verify.outputs.version }}
       CHANNEL: ${{ needs.verify.outputs.channel }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-      AWS_DEFAULT_REGION: auto
-      R2: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-      BUCKET: ${{ secrets.R2_BUCKET }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
-      - name: Collect
+      - name: Collect and checksum
         run: |
           mkdir -p dist
           cp artifacts/windows/* dist/
           cp artifacts/notes/notes.md notes.md
-          ls -l dist
-      - name: Signing key
-        env:
-          KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-        run: |
-          sudo apt-get update && sudo apt-get install -y minisign
-          printf '%s\n' "$KEY" > "$RUNNER_TEMP/minisign.key"
-          echo "MINISIGN_KEY_FILE=$RUNNER_TEMP/minisign.key" >> "$GITHUB_ENV"
-      - name: Sign the packages
-        env:
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-        run: |
           cd dist
-          for file in ShellRS-*; do
-            printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$MINISIGN_KEY_FILE" \
-              -m "$file" -t "shellrs $VERSION $file"
-          done
           sha256sum ShellRS-* > SHA256SUMS
-      - name: Upload the packages
-        run: |
-          aws s3 cp dist "s3://$BUCKET/releases/$VERSION/" --recursive \
-            --endpoint-url "$R2" --cache-control "public, max-age=31536000, immutable"
+          ls -la
       - name: GitHub release
         run: |
           prerelease=""
           [ "$CHANNEL" = beta ] && prerelease="--prerelease"
           gh release create "v$VERSION" dist/* --title "ShellRS $VERSION" \
             --notes-file notes.md $prerelease
-      - name: Manifests, last
-        env:
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-          # The GitHub release just created: clients try it when
-          # dl.shellrs.com fails. The repository is public, so it needs no
-          # sign-in.
-          SHELLRS_MIRROR_BASE: ${{ github.server_url }}/${{ github.repository }}/releases/download/v${{ needs.verify.outputs.version }}
-        run: |
-          publish() {
-            packaging/make-manifest.sh "$VERSION" "$1" notes.md dist "$1.json"
-            aws s3 cp "$1.json" "s3://$BUCKET/update/v1/$1.json" --endpoint-url "$R2" \
-              --content-type application/json --cache-control "public, max-age=300"
-            echo "https://dl.shellrs.com/update/v1/$1.json" >> purge.txt
-          }
-          publish "$CHANNEL"
-          if [ "$CHANNEL" = stable ]; then
-            # Beta follows stable unless it is already ahead.
-            beta=$(curl -fsS https://dl.shellrs.com/update/v1/beta.json | jq -r .manifest | jq -r .version || true)
-            [ -n "$beta" ] || beta=0.0.0
-            if python3 - "$VERSION" "$beta" <<'EOF'
-          import sys
-          def key(version):
-              core, _, pre = version.partition("-")
-              parts = [int(part) for part in core.split(".")]
-              # A release sorts after its pre-releases.
-              return parts, (1,) if not pre else (0, pre)
-          sys.exit(0 if key(sys.argv[1]) > key(sys.argv[2]) else 1)
-          EOF
-            then
-              publish beta
-            fi
-          fi
-      - name: Purge the manifests from the CDN cache
-        env:
-          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-        run: |
-          files=$(jq -R . purge.txt | jq -s '{files: .}')
-          curl -fsS -X POST "https://api.cloudflare.com/client/v4/zones/$CF_ZONE_ID/purge_cache" \
-            -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
-            --data "$files"
-      # After the purge: the site's build reads the manifests from dl.shellrs.com.
-      - name: Rebuild shellrs.com
-        env:
-          SITE_DEPLOY_HOOK: ${{ secrets.SITE_DEPLOY_HOOK }}
-        run: curl -fsS -X POST "$SITE_DEPLOY_HOOK"
+
