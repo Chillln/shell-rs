@@ -10,6 +10,7 @@
 
 pub mod app;
 pub mod cli;
+pub mod cloud_sync;
 pub mod connection;
 pub mod credential;
 pub mod docker;

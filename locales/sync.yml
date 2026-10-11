@@ -1,0 +1,314 @@
+_version: 2
+
+sync.keep_local:
+  zh-CN: 保留本地并上传…
+  en: Keep local and upload…
+sync.keep_local.title:
+  zh-CN: 用本地清单替换云保险库？
+  en: Replace the cloud vault with the local inventory?
+sync.keep_local.body:
+  zh-CN: "云保险库将替换为本地 %{hosts} 台主机、%{groups} 个分组和 %{credentials} 条凭据及相应密码。替换前会保存云端与本地的加密副本；云端再次变化时上传会停止。"
+  en: "Replace the cloud vault with %{hosts} local hosts, %{groups} groups, %{credentials} credentials, and associated passwords. Encrypted copies of both versions will be saved. Upload stops if the cloud changes again."
+sync.keep_local.confirm:
+  zh-CN: 替换云保险库
+  en: Replace cloud vault
+
+sync.title:
+  zh-CN: "云同步"
+  en: "Cloud sync"
+
+sync.storage_title:
+  zh-CN: "S3 保险库"
+  en: "S3 vault"
+
+sync.keywords:
+  zh-CN: "云同步 S3 主机 凭据 加密 备份 恢复"
+  en: "Cloud sync S3 hosts credentials encryption backup recovery"
+
+sync.description:
+  zh-CN: "在本机加密主机、分组、密码、代理密码和凭据私钥，云端仅保存密文。使用手动上传和下载，多设备修改冲突时由你选择保留的版本。"
+  en: "Encrypt hosts, groups, passwords, proxy passwords, and credential private keys on this device. The cloud stores ciphertext. Upload and download manually, and resolve conflicting changes explicitly."
+
+sync.field.endpoint:
+  zh-CN: "端点（留空使用 AWS S3）"
+  en: "Endpoint (leave blank for AWS S3)"
+
+sync.field.region:
+  zh-CN: "区域"
+  en: "Region"
+
+sync.field.bucket:
+  zh-CN: "存储桶"
+  en: "Bucket"
+
+sync.field.object_key:
+  zh-CN: "保险库对象路径"
+  en: "Vault object key"
+
+sync.field.access_key:
+  zh-CN: "访问密钥 ID"
+  en: "Access key ID"
+
+sync.field.secret_key:
+  zh-CN: "访问密钥"
+  en: "Secret access key"
+
+sync.field.token:
+  zh-CN: "临时令牌（可选）"
+  en: "Session token (optional)"
+
+sync.field.virtual_hosted:
+  zh-CN: "使用虚拟主机寻址"
+  en: "Use virtual hosted addressing"
+
+sync.field.password:
+  zh-CN: "保险库主密码"
+  en: "Vault password"
+
+sync.field.recovery:
+  zh-CN: "恢复密钥（可代替主密码）"
+  en: "Recovery key (alternative to password)"
+
+sync.credentials_help:
+  zh-CN: "访问密钥和令牌保存在系统钥匙串中。留空保留已保存的值；使用“清除临时令牌”移除旧令牌。自定义端点必须使用 HTTPS。"
+  en: "Access secrets are stored in the system keychain. Blank fields keep saved values. Use Clear session token to remove an old token. Custom endpoints must use HTTPS."
+
+sync.unlock_help:
+  zh-CN: "新建保险库的主密码至少 12 个字符。上传已有保险库不会修改主密码。关闭设置或点击“锁定”会清除解锁输入；恢复密钥应离线保存。"
+  en: "New vault passwords need at least 12 characters. Uploading an existing vault does not change its password. Close settings or select Lock to clear unlock inputs. Keep your recovery key offline."
+
+sync.save:
+  zh-CN: "保存配置"
+  en: "Save configuration"
+
+sync.clear_token:
+  zh-CN: "清除临时令牌"
+  en: "Clear session token"
+
+sync.upload:
+  zh-CN: "上传本地保险库"
+  en: "Upload local vault"
+
+sync.download:
+  zh-CN: "下载并预览"
+  en: "Download and preview"
+
+sync.import_backup:
+  zh-CN: "导入加密备份…"
+  en: "Import encrypted backup…"
+
+sync.copy_recovery:
+  zh-CN: "复制恢复密钥"
+  en: "Copy recovery key"
+
+sync.lock:
+  zh-CN: "锁定 / 取消预览"
+  en: "Lock / cancel preview"
+
+sync.apply:
+  zh-CN: "应用此保险库…"
+  en: "Apply this vault…"
+
+sync.confirm.title:
+  zh-CN: "替换本地主机与凭据？"
+  en: "Replace local hosts and credentials?"
+
+sync.confirm.body:
+  zh-CN: "将使用预览中的 %{hosts} 台主机、%{groups} 个分组和 %{credentials} 条凭据替换本地清单及相应密码。云端缺失的本地主机会被删除，它们的书签、转发规则和限定命令片段也会被删除。应用前的本地加密备份已保存，可通过“导入加密备份”恢复。"
+  en: "Replace the local inventory and associated passwords with the previewed %{hosts} hosts, %{groups} groups, and %{credentials} credentials. Local hosts absent from the vault will be deleted, along with their bookmarks, forwards, and scoped snippets. An encrypted local backup is available through Import encrypted backup."
+
+sync.confirm.apply:
+  zh-CN: "替换"
+  en: "Replace"
+
+sync.status.ready:
+  zh-CN: "先保存 S3 配置，再输入主密码上传或下载保险库。"
+  en: "Save your S3 configuration, then enter the vault password to upload or download."
+
+sync.status.saving:
+  zh-CN: "正在保存配置和访问密钥…"
+  en: "Saving configuration and access secrets…"
+
+sync.status.saved:
+  zh-CN: "配置已保存。可以上传或下载保险库。"
+  en: "Configuration saved. You can upload or download the vault."
+
+sync.status.working:
+  zh-CN: "正在处理加密保险库…"
+  en: "Processing the encrypted vault…"
+
+sync.status.choosing:
+  zh-CN: "选择加密备份文件。"
+  en: "Choose an encrypted backup file."
+
+sync.status.created:
+  zh-CN: "保险库已创建。请复制恢复密钥并离线保存。本地加密备份：%{path}"
+  en: "Vault created. Copy the recovery key and keep it offline. Local encrypted backup: %{path}"
+
+sync.status.uploaded:
+  zh-CN: "本地保险库已上传。加密备份：%{path}"
+  en: "Local vault uploaded. Encrypted backup: %{path}"
+
+sync.status.preview:
+  zh-CN: "预览包含 %{hosts} 台主机、%{groups} 个分组和 %{credentials} 条凭据，将替换本地 %{local_hosts} 台主机、%{local_groups} 个分组和 %{local_credentials} 条凭据。应用前先关闭远程终端、SFTP 标签和端口转发。本地加密备份：%{path}"
+  en: "The preview contains %{hosts} hosts, %{groups} groups, and %{credentials} credentials. It will replace %{local_hosts} local hosts, %{local_groups} groups, and %{local_credentials} credentials. Close remote terminal and SFTP tabs and stop forwards before applying. Local encrypted backup: %{path}"
+
+sync.status.applying:
+  zh-CN: "正在应用主机与凭据…"
+  en: "Applying hosts and credentials…"
+
+sync.status.applied:
+  zh-CN: "保险库已应用。"
+  en: "Vault applied."
+
+sync.status.locked:
+  zh-CN: "已清除解锁输入和预览内容。"
+  en: "Unlock inputs and preview cleared."
+
+sync.status.recovery_copied:
+  zh-CN: "恢复密钥已复制，请离线保存。"
+  en: "Recovery key copied. Keep it offline."
+
+sync.status.token_cleared:
+  zh-CN: "临时令牌已清除。"
+  en: "Session token cleared."
+
+sync.error.endpoint:
+  zh-CN: "端点必须是有效的 HTTPS 地址，不能包含登录信息、查询参数或片段。"
+  en: "Use a valid HTTPS endpoint without embedded credentials, query parameters, or fragments."
+
+sync.error.config:
+  zh-CN: "填写区域、存储桶和访问密钥 ID。"
+  en: "Enter the region, bucket, and access key ID."
+
+sync.error.object_key:
+  zh-CN: "填写有效的对象路径，不能以斜杠开头或包含空目录、. 和 ..。"
+  en: "Enter a valid object key without a leading slash, empty segments, or relative directory segments."
+
+sync.error.keychain:
+  zh-CN: "无法保存同步认证信息：%{error}"
+  en: "Could not save sync access secrets: %{error}"
+
+sync.error.key_size:
+  zh-CN: "私钥文件为空或超过 1 MB，无法同步。"
+  en: "A private key is empty or exceeds 1 MB."
+
+sync.error.key_format:
+  zh-CN: "保险库中的私钥格式无法识别。"
+  en: "A private key in the vault has an unsupported format."
+
+sync.error.format:
+  zh-CN: "保险库格式、引用关系或版本无效。"
+  en: "The vault format, references, or version are invalid."
+
+sync.error.crypto:
+  zh-CN: "无法加密保险库。"
+  en: "Could not encrypt the vault."
+
+sync.error.unlock:
+  zh-CN: "无法解锁保险库。检查主密码或恢复密钥；文件也可能已损坏。"
+  en: "Could not unlock the vault. Check the password or recovery key; the file may also be damaged."
+
+sync.error.password_length:
+  zh-CN: "新建保险库的主密码至少需要 12 个字符。"
+  en: "A new vault password needs at least 12 characters."
+
+sync.error.password:
+  zh-CN: "输入保险库主密码或恢复密钥。"
+  en: "Enter the vault password or recovery key."
+
+sync.error.size:
+  zh-CN: "保险库过大，无法处理。"
+  en: "The vault is too large to process."
+
+sync.error.access_key:
+  zh-CN: "未保存访问密钥。填写访问密钥后保存配置。"
+  en: "No secret access key is saved. Enter it and save the configuration."
+
+sync.error.conflict:
+  zh-CN: "云端保险库已变化，请下载预览后处理冲突。"
+  en: "The cloud vault changed. Download a preview to resolve the conflict."
+
+sync.error.permission:
+  zh-CN: "S3 认证或权限不足。检查访问密钥、令牌、区域及对象的读取和写入权限。"
+  en: "S3 authentication or permissions failed. Check access secrets, token, region, and object read/write permissions."
+
+sync.error.conditional:
+  zh-CN: "此 S3 服务不支持安全的条件写入，无法同步。"
+  en: "This S3 service does not support the conditional writes required for sync."
+
+sync.error.network:
+  zh-CN: "S3 请求失败。检查端点、区域、网络和存储桶配置后重试。"
+  en: "The S3 request failed. Check the endpoint, region, network, and bucket configuration, then retry."
+
+sync.error.etag:
+  zh-CN: "S3 服务未返回对象版本标识，无法安全同步。"
+  en: "S3 did not return an object version identifier required for safe sync."
+
+sync.error.unavailable:
+  zh-CN: "当前环境没有可用的同步备份目录。"
+  en: "No sync backup directory is available in this environment."
+
+sync.error.cursor:
+  zh-CN: "同步版本记录无法读取。先下载预览并检查本地同步目录。"
+  en: "The saved sync revision is unreadable. Check the local sync directory before continuing."
+
+sync.error.no_keychain:
+  zh-CN: "系统钥匙串不可用，无法同步凭据。"
+  en: "The system keychain is unavailable; credentials cannot be synced."
+
+sync.error.rollback:
+  zh-CN: "云端保险库身份变化或版本回退，已停止同步。"
+  en: "The cloud vault identity changed or its revision moved backward. Sync stopped."
+
+sync.error.conflict_backup:
+  zh-CN: "云端保险库已变化。先下载预览，再选择要保留的版本；本地冲突副本已加密保存：%{path}"
+  en: "The cloud vault changed. Download a preview and choose which version to retain. An encrypted local conflict copy is saved at %{path}"
+
+sync.error.remote_deleted:
+  zh-CN: "已同步的云保险库被删除，已停止上传。检查 S3 历史版本或改用新的对象路径。"
+  en: "The synced cloud vault was deleted. Upload stopped. Check S3 version history or use a new object key."
+
+sync.error.upload_backup:
+  zh-CN: "上传未确认完成：%{error}。本地加密备份：%{path}"
+  en: "Upload completion was not confirmed: %{error}. Local encrypted backup: %{path}"
+
+sync.error.empty:
+  zh-CN: "云端还没有保险库。可先上传本地清单。"
+  en: "No cloud vault exists yet. Upload the local inventory first."
+
+sync.error.local_changed:
+  zh-CN: "本地主机或凭据已变化，预览已过期。取消预览后重新下载。"
+  en: "Local hosts or credentials changed; the preview is stale. Cancel it and download again."
+
+sync.error.key_directory:
+  zh-CN: "当前环境没有私钥保存目录，无法导入私钥凭据。"
+  en: "No private key directory is available for importing key credentials."
+
+sync.error.rollback_failed:
+  zh-CN: "导入失败，部分凭据未能恢复。请从应用前的加密备份恢复：%{path}"
+  en: "Import failed and some credentials could not be restored. Restore the encrypted backup from before the import: %{path}"
+
+sync.error.compensation:
+  zh-CN: "无法完整恢复导入前的凭据。"
+  en: "Could not fully restore credentials from before the import."
+
+sync.error.save_first:
+  zh-CN: "S3 配置或访问密钥已修改，先点击“保存配置”。"
+  en: "S3 configuration or access secrets changed. Save the configuration first."
+
+sync.error.file_picker:
+  zh-CN: "无法选择备份文件。"
+  en: "Could not select a backup file."
+
+sync.error.connections:
+  zh-CN: "先关闭所有远程终端和 SFTP 标签，并停止端口转发，再应用保险库。"
+  en: "Close all remote terminal and SFTP tabs and stop forwards before applying the vault."
+
+sync.error.no_preview:
+  zh-CN: "没有待应用的保险库预览。"
+  en: "No vault preview is available to apply."
+
+sync.error.no_recovery:
+  zh-CN: "本机未保存此保险库的恢复密钥。使用创建保险库时离线保存的密钥。"
+  en: "No recovery key for this vault is stored on this device. Use the key saved offline when the vault was created."

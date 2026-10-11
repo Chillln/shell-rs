@@ -12,6 +12,7 @@ use super::{SecretRef, SecretStore, SharedSecretStore};
 /// `HostStore` 把注入的秘密存储包成这样，连接器读到的也是它，所以终端和 SFTP
 /// 用得上链接里的密码，而这个密码不会落进钥匙串；没有钥匙串的机器上照样能用。
 pub struct TemporarySecretStore {
+    keychain_access: Mutex<()>,
     keychain: SharedSecretStore,
     passwords: Mutex<HashMap<u64, Zeroizing<String>>>,
 }
@@ -19,6 +20,7 @@ pub struct TemporarySecretStore {
 impl TemporarySecretStore {
     pub fn new(keychain: SharedSecretStore) -> Self {
         Self {
+            keychain_access: Mutex::new(()),
             keychain,
             passwords: Mutex::new(HashMap::new()),
         }
@@ -42,10 +44,39 @@ impl TemporarySecretStore {
 }
 
 impl SecretStore for TemporarySecretStore {
+    fn compare_and_set(
+        &self,
+        secret: &SecretRef,
+        expected: Option<&str>,
+        value: Option<&str>,
+    ) -> Result<bool> {
+        if matches!(secret, SecretRef::Temporary { .. }) {
+            anyhow::bail!("temporary connections are excluded from cloud sync");
+        }
+        let _access = self
+            .keychain_access
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let current = self.keychain.get(secret)?;
+        if current.as_deref().map(String::as_str) != expected {
+            return Ok(false);
+        }
+        match value {
+            Some(value) => self.keychain.set(secret, value)?,
+            None => self.keychain.delete(secret)?,
+        }
+        Ok(true)
+    }
     fn get(&self, secret: &SecretRef) -> Result<Option<Zeroizing<String>>> {
         match secret {
             SecretRef::Temporary { host } => Ok(self.passwords().get(host).cloned()),
-            _ => self.keychain.get(secret),
+            _ => {
+                let _access = self
+                    .keychain_access
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                self.keychain.get(secret)
+            }
         }
     }
 
@@ -55,7 +86,13 @@ impl SecretStore for TemporarySecretStore {
                 self.remember(*host, Zeroizing::new(value.to_string()));
                 Ok(())
             }
-            _ => self.keychain.set(secret, value),
+            _ => {
+                let _access = self
+                    .keychain_access
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                self.keychain.set(secret, value)
+            }
         }
     }
 
@@ -65,7 +102,13 @@ impl SecretStore for TemporarySecretStore {
                 self.forget(*host);
                 Ok(())
             }
-            _ => self.keychain.delete(secret),
+            _ => {
+                let _access = self
+                    .keychain_access
+                    .lock()
+                    .unwrap_or_else(|error| error.into_inner());
+                self.keychain.delete(secret)
+            }
         }
     }
 

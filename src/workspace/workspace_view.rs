@@ -141,6 +141,10 @@ pub(super) enum PromptOwner {
 /// Owns the host store, the dock and the registry of open per-host
 /// panels, and handles every application action.
 pub struct Workspace {
+    pub(super) cloud_sync: Entity<crate::cloud_sync::CloudSyncPanel>,
+    pub(super) cloud_sync_services: crate::cloud_sync::SyncServices,
+    pub(super) cloud_sync_pending: Option<crate::cloud_sync::Download>,
+    pub(super) cloud_sync_task: Option<Task<()>>,
     pub(super) store: Entity<HostStore>,
     pub(super) dock_area: Entity<DockArea>,
     skin: Rc<WorkspaceDockSkin>,
@@ -263,6 +267,8 @@ impl Workspace {
             ),
         }
         this.sync_cli_server(cx);
+        this.cloud_sync_services =
+            crate::cloud_sync::SyncServices::new(crate::app::data_dir().join("cloud-sync"));
         this.remember_window(crate::app::window_state_path(), window, cx);
         this
     }
@@ -293,6 +299,14 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) -> Self {
         let focus_handle = cx.focus_handle();
+        let cloud_sync = cx.new(|cx| {
+            crate::cloud_sync::CloudSyncPanel::new(
+                settings.read(cx).settings().cloud_sync,
+                focus_handle.clone(),
+                window,
+                cx,
+            )
+        });
         let recent = cx.new(|cx| RecentHosts::new(store.clone(), focus_handle.clone(), cx));
         let (dock_area, skin) = WorkspaceDockSkin::dock_area(
             DOCK_ID,
@@ -485,6 +499,10 @@ impl Workspace {
         forwards.update(cx, |forwards, cx| forwards.start_automatic(cx));
 
         Self {
+            cloud_sync,
+            cloud_sync_services: Default::default(),
+            cloud_sync_pending: None,
+            cloud_sync_task: None,
             store,
             dock_area,
             skin,
@@ -1151,7 +1169,8 @@ impl Workspace {
         let integration = self.cli_integration.clone();
         // Something may have been installed or removed since last time.
         integration.update(cx, |integration, cx| integration.refresh(cx));
-        let panel = cx.new(|cx| SettingsPanel::new(store, integration, window, cx));
+        let cloud_sync = self.cloud_sync.clone();
+        let panel = cx.new(|cx| SettingsPanel::new(store, integration, cloud_sync, window, cx));
         let subscription = cx.subscribe_in(
             &panel,
             window,
@@ -1163,6 +1182,9 @@ impl Workspace {
                         this.set_active_tab(Some(CenterTab::Settings), window, cx);
                     }
                     SettingsPanelEvent::Closed => {
+                        this.cloud_sync_pending = None;
+                        this.cloud_sync
+                            .update(cx, |panel, cx| panel.clear_unlock_inputs(window, cx));
                         this.settings_tab = None;
                         if this.active_tab == Some(CenterTab::Settings) {
                             this.set_active_tab(None, window, cx);
@@ -2497,6 +2519,17 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_remove_agent_skill))
             .on_action(cx.listener(Self::on_refresh_cli_integration))
             .on_action(cx.listener(Self::on_copy_agent_skill))
+            .on_action(cx.listener(Self::on_save_cloud_sync_settings))
+            .on_action(cx.listener(Self::on_upload_cloud_vault))
+            .on_action(cx.listener(Self::on_download_cloud_vault))
+            .on_action(cx.listener(Self::on_apply_cloud_vault))
+            .on_action(cx.listener(Self::on_commit_cloud_vault))
+            .on_action(cx.listener(Self::on_keep_local_cloud_vault))
+            .on_action(cx.listener(Self::on_commit_local_cloud_vault))
+            .on_action(cx.listener(Self::on_import_cloud_backup))
+            .on_action(cx.listener(Self::on_lock_cloud_vault))
+            .on_action(cx.listener(Self::on_copy_cloud_recovery_key))
+            .on_action(cx.listener(Self::on_clear_cloud_session_token))
             .on_action(cx.listener(Self::on_close_settings))
             .on_action(cx.listener(Self::on_close_active_tab))
             .on_action(cx.listener(Self::on_next_tab))

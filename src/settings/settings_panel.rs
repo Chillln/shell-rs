@@ -49,6 +49,7 @@ pub enum SettingsPanelEvent {
 /// fields read and write the `SettingsStore`; the workspace applies what
 /// changes.
 pub struct SettingsPanel {
+    cloud_sync: Entity<crate::cloud_sync::CloudSyncPanel>,
     store: Entity<SettingsStore>,
     /// What of the external CLI is installed, for 外部 CLI.
     integration: Entity<CliIntegration>,
@@ -74,6 +75,7 @@ impl SettingsPanel {
     pub fn new(
         store: Entity<SettingsStore>,
         integration: Entity<CliIntegration>,
+        cloud_sync: Entity<crate::cloud_sync::CloudSyncPanel>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -97,6 +99,7 @@ impl SettingsPanel {
             });
         });
         Self {
+            cloud_sync,
             store,
             integration,
             highlight_rules,
@@ -229,7 +232,7 @@ struct Category {
 type CategoryGroups = fn(&SettingsPanel, &App) -> Vec<SettingGroup>;
 
 /// The categories, in the order the left column lists them.
-const CATEGORIES: [Category; 6] = [
+const CATEGORIES: [Category; 7] = [
     Category {
         title: "settings.category.appearance",
         icon: CatalogIcon::Palette,
@@ -260,7 +263,25 @@ const CATEGORIES: [Category; 6] = [
         icon: CatalogIcon::AppWindow,
         groups: application_groups,
     },
+    Category {
+        title: "sync.title",
+        icon: CatalogIcon::Lock,
+        groups: cloud_sync_groups,
+    },
 ];
+
+/// 云同步表单自身持有输入实体，设置容器提供搜索与滚动区域。
+fn cloud_sync_groups(panel: &SettingsPanel, _: &App) -> Vec<SettingGroup> {
+    let cloud_sync = panel.cloud_sync.clone();
+    vec![
+        SettingGroup::new()
+            .title(t!("sync.storage_title"))
+            .items([
+                SettingItem::render(move |_, _, _| cloud_sync.clone().into_any_element())
+                    .keywords(keywords(t!("sync.keywords"))),
+            ]),
+    ]
+}
 
 impl Category {
     /// The page of the category at `ix` in `CATEGORIES`.

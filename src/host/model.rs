@@ -496,6 +496,8 @@ fn is_ip_address(host: &str) -> bool {
 #[non_exhaustive]
 pub struct HostGroup {
     pub id: GroupId,
+    /// 跨设备保持不变的分组标识。
+    pub public_id: PublicId,
     pub name: SharedString,
     pub parent: Option<GroupId>,
     /// Order among groups with the same parent.
@@ -508,6 +510,7 @@ impl HostGroup {
     pub fn new(id: GroupId, draft: GroupDraft) -> Self {
         Self {
             id,
+            public_id: PublicId::generate(),
             name: draft.name,
             parent: draft.parent,
             sort_order: 0,

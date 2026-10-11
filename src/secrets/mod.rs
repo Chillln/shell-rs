@@ -28,6 +28,8 @@ pub const SERVICE: &str = "shellrs";
 /// 地址 + 用户名」归属，经由同一个代理的主机共用。
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SecretRef {
+    /// S3 配置的访问密钥或临时令牌。
+    CloudSync { profile: String, name: String },
     /// 某个 SSH 端点的登录密码。
     Password {
         user: String,
@@ -50,6 +52,12 @@ pub enum SecretRef {
 }
 
 impl SecretRef {
+    pub fn cloud_sync(profile: impl Into<String>, name: impl Into<String>) -> Self {
+        Self::CloudSync {
+            profile: profile.into(),
+            name: name.into(),
+        }
+    }
     pub fn password(user: impl Into<String>, host: impl Into<String>, port: u16) -> Self {
         Self::Password {
             user: user.into(),
@@ -85,6 +93,7 @@ impl SecretRef {
     /// 钥匙串条目的账户名。前缀区分种类，在 Keychain Access 里直接可读。
     pub fn account(&self) -> String {
         match self {
+            Self::CloudSync { profile, name } => format!("cloud-sync:{profile}:{name}"),
             Self::Password { user, host, port } => format!("password:{user}@{host}:{port}"),
             Self::Passphrase { key_path } => format!("passphrase:{key_path}"),
             Self::Credential { keychain_id } => format!("credential:{keychain_id}"),
@@ -99,6 +108,23 @@ impl SecretRef {
 /// 每个方法都是阻塞的，在 macOS 上还可能弹出系统授权框，所以只能在后台执行器
 /// 或传输层自己的工作线程上调用，**永远不要在 UI 线程上调用**。
 pub trait SecretStore: Send + Sync + 'static {
+    /// 按已读取的值更新；生产包装层将比较与写入放在同一个互斥区间。
+    fn compare_and_set(
+        &self,
+        secret: &SecretRef,
+        expected: Option<&str>,
+        value: Option<&str>,
+    ) -> Result<bool> {
+        let current = self.get(secret)?;
+        if current.as_deref().map(String::as_str) != expected {
+            return Ok(false);
+        }
+        match value {
+            Some(value) => self.set(secret, value)?,
+            None => self.delete(secret)?,
+        }
+        Ok(true)
+    }
     /// 读一条秘密。没存过是 `Ok(None)`，不是错误。
     fn get(&self, secret: &SecretRef) -> Result<Option<Zeroizing<String>>>;
     fn set(&self, secret: &SecretRef, value: &str) -> Result<()>;

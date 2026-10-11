@@ -143,6 +143,28 @@ gpui_kit::actions!(
         RefreshCliIntegration,
         /// Copy the agent skill's text to the clipboard.
         CopyAgentSkill,
+        /// 保存 S3 配置及系统钥匙串中的访问密钥。
+        SaveCloudSyncSettings,
+        /// 加密并上传主机保险库。
+        UploadCloudVault,
+        /// 下载并预览云保险库。
+        DownloadCloudVault,
+        /// 确认后应用下载的主机与凭据。
+        ApplyCloudVault,
+        /// 执行已经确认的保险库替换。
+        CommitCloudVault,
+        /// 在冲突预览中选择保留本地清单。
+        KeepLocalCloudVault,
+        /// 执行已经确认的本地清单上传。
+        CommitLocalCloudVault,
+        /// 从本地加密备份预览保险库。
+        ImportCloudBackup,
+        /// 清除解锁输入和待应用的保险库。
+        LockCloudVault,
+        /// 复制本机保存的恢复密钥。
+        CopyCloudRecoveryKey,
+        /// 删除此 S3 配置的临时令牌。
+        ClearCloudSessionToken,
     ]
 );
 

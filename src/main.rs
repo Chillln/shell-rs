@@ -32,7 +32,7 @@ fn main() {
     if let Err(error) = std::fs::remove_file(shellrs::app::data_dir().join("analytics.json"))
         && error.kind() != std::io::ErrorKind::NotFound
     {
-        eprintln!("shellrs: 无法删除旧版统计缓存：{error}");
+        eprintln!("shellrs: could not delete legacy statistics cache: {error}");
     }
     let app = gpui_kit::application().with_assets(shellrs::app::AppAssets);
     // macOS: the Dock icon of a ShellRS whose window was closed, which only

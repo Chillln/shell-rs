@@ -16,6 +16,8 @@ use crate::terminal::{
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
+    /// S3 加密云同步的非秘密配置。
+    pub cloud_sync: crate::cloud_sync::CloudSyncSettings,
     pub language: InterfaceLanguage,
     pub appearance: Appearance,
     /// 外观 → 终端主题.

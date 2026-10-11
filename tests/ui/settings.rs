@@ -2,6 +2,154 @@
 
 use crate::support::*;
 
+/// 在设置页的滚动区域内定位云同步控件，使用真实滚轮事件。
+fn reveal_cloud_control(window: &mut gpui_kit::Window, id: &'static str, cx: &mut App) {
+    for _ in 0..12 {
+        window.render_frame(cx);
+        if window.try_find(id).is_some_and(|control| control.visible()) {
+            return;
+        }
+        window.scroll(
+            "settings",
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), px(-240.))),
+            cx,
+        );
+    }
+    assert!(window.find(id).visible(), "云同步控件不可见：{id}");
+}
+
+fn open_cloud_settings(cx: &mut TestAppContext, handle: WindowHandle<Root>) {
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window.click("open-settings", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window.within("settings").click("0-6", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+}
+
+#[gpui_kit::test]
+fn cloud_sync_validates_configuration_and_keeps_access_secrets_in_keychain(
+    cx: &mut TestAppContext,
+) {
+    let secrets = Arc::new(InMemorySecretStore::default());
+    let (handle, workspace) =
+        open_workspace_with_store(cx, HostStore::empty().with_secrets(secrets.clone()));
+    open_cloud_settings(cx, handle);
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("cloud-sync").visible());
+        assert_eq!(window.find("sync-region").value(), Some("us-east-1"));
+        assert_eq!(
+            window.find("sync-object-key").value(),
+            Some("shellrs/vault.enc")
+        );
+        reveal_cloud_control(window, "sync-save", cx);
+        window.click("sync-save", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.find("sync-status").label(),
+            Some("填写区域、存储桶和访问密钥 ID。")
+        );
+        window.scroll(
+            "settings",
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), px(1200.))),
+            cx,
+        );
+        window.click("sync-bucket", cx);
+        window.input("test-bucket", cx);
+        window.click("sync-access-key", cx);
+        window.input("test-access", cx);
+        reveal_cloud_control(window, "sync-secret-key", cx);
+        window.click("sync-secret-key", cx);
+        window.input("测试访问密钥", cx);
+        assert_eq!(window.find("sync-secret-key").value(), None);
+        reveal_cloud_control(window, "sync-save", cx);
+        window.click("sync-save", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update(|cx| {
+        let settings = workspace.read(cx).settings().read(cx).settings();
+        assert_eq!(settings.cloud_sync.bucket, "test-bucket");
+        assert_eq!(settings.cloud_sync.access_key_id, "test-access");
+        assert!(
+            !serde_json::to_string(&settings)
+                .unwrap()
+                .contains("测试访问密钥")
+        );
+        assert_eq!(secrets.len(), 1);
+    });
+    cx.update_window(handle.into(), |_, window, cx| {
+        reveal_cloud_control(window, "sync-status", cx);
+        assert_eq!(
+            window.find("sync-status").label(),
+            Some("配置已保存。可以上传或下载保险库。")
+        );
+        reveal_cloud_control(window, "sync-password", cx);
+        window.click("sync-password", cx);
+        window.input("测试保险库主密码", cx);
+        assert_eq!(window.find("sync-password").value(), None);
+        reveal_cloud_control(window, "sync-lock", cx);
+        window.click("sync-lock", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        reveal_cloud_control(window, "sync-status", cx);
+        assert_eq!(
+            window.find("sync-status").label(),
+            Some("已清除解锁输入和预览内容。")
+        );
+        reveal_cloud_control(window, "sync-upload", cx);
+        window.click("sync-upload", cx);
+    })
+    .unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(
+            window.find("sync-status").label(),
+            Some("输入保险库主密码或恢复密钥。")
+        );
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+fn cloud_sync_fields_keep_alignment_with_theme_and_zoom(cx: &mut TestAppContext) {
+    let (handle, _) = open_workspace_with_store(cx, HostStore::empty());
+    open_cloud_settings(cx, handle);
+    for _ in 0..2 {
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            let endpoint = window.find("sync-endpoint").bounds();
+            let key = window.find("sync-object-key").bounds();
+            let access = window.find("sync-access-key").bounds();
+            assert_eq!(endpoint.left(), key.left());
+            assert_eq!(endpoint.left(), access.left());
+            assert_eq!(endpoint.size.width, key.size.width);
+            let region = window.find("sync-region").bounds();
+            let bucket = window.find("sync-bucket").bounds();
+            assert_eq!(region.top(), bucket.top());
+            assert!((region.size.width - bucket.size.width).abs() <= px(1.));
+            window.click("theme-toggle", cx);
+            window.dispatch_action(Box::new(shellrs::app::ZoomIn), cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+    }
+}
+
 /// The app's list hover is in effect, not the theme's own (a 0.6 alpha):
 /// deepened, and dark halved to stay fainter than a selected row.
 fn app_list_hover(theme: &gpui_kit::component::Theme) -> bool {
@@ -55,7 +203,7 @@ fn settings_open_from_the_host_list_as_one_tab(cx: &mut TestAppContext) {
         assert!(window.find("settings").visible());
         assert_eq!(window.find("settings").focused(), Some(true));
         assert_eq!(window.find("settings-tab").label(), Some("设置"));
-        assert!(window.try_find("0-6").is_none());
+        assert!(window.try_find("0-7").is_none());
         assert!(window.try_find("update-available").is_none());
         // Two columns: the first category, 外观, is shown until another is
         // picked. `Settings` names its category rows by position.

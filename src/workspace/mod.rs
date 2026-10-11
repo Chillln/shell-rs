@@ -3,6 +3,7 @@
 //! the center shows while no tab is open.
 
 mod cli_changes;
+mod cloud_sync;
 mod credentials;
 mod dock_skin;
 mod editors;

@@ -43,6 +43,9 @@ gpui-kit = { version = "0.6.1", features = [
 ] }
 alacritty_terminal = "0.26"
 anyhow = "1"
+argon2 = "0.5"
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+object_store = { version = "0.12.4", default-features = false, features = ["aws"] }
 async-channel = "2"
 # A terminal's parser thread waits for output only until a synchronized
 # update has to be drawn.
@@ -75,7 +78,7 @@ unicode-width = "0.2"
 # `ssh://user:password@host:port` links, as bastion hosts open Xshell with.
 url = "2"
 percent-encoding = "2"
-zeroize = "1"
+zeroize = { version = "1", features = ["serde"] }
 keyring = "4"
 trash = "5"
 # The Dock icon when running outside an app bundle (`cargo run`). GPUI
@@ -143,6 +146,7 @@ rsa = { opt-level = 3 }
 crypto-bigint = { opt-level = 3 }
 crypto-primes = { opt-level = 3 }
 bcrypt-pbkdf = { opt-level = 3 }
+argon2 = { opt-level = 3 }
 blowfish = { opt-level = 3 }
 # The editor parses whole files of up to 5 MB to highlight them.
 tree-sitter = { opt-level = 3 }

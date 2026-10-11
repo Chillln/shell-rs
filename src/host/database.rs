@@ -37,8 +37,8 @@ fn from_sql(id: i64) -> u64 {
 ///
 /// 13 is the schema as it was rebuilt before the first release. Versions up
 /// to 12 were development builds, and their files are refused. 14 adds the
-/// command snippets.
-const SCHEMA_VERSION: i64 = 14;
+/// command snippets. 15 增加分组的稳定同步标识。
+const SCHEMA_VERSION: i64 = 15;
 
 /// The whole schema, as a new database gets it.
 ///
@@ -85,9 +85,11 @@ CREATE TABLE groups (
     parent_id  INTEGER REFERENCES groups(id) ON DELETE CASCADE,
     name       TEXT NOT NULL CHECK (name <> ''),
     sort_order INTEGER NOT NULL DEFAULT 0,
-    expanded   INTEGER NOT NULL DEFAULT 1 CHECK (expanded IN (0, 1))
+    expanded   INTEGER NOT NULL DEFAULT 1 CHECK (expanded IN (0, 1)),
+    public_id  TEXT
 ) STRICT;
 CREATE INDEX groups_parent_id ON groups(parent_id);
+CREATE UNIQUE INDEX groups_public_id ON groups(public_id);
 CREATE TABLE credentials (
     id          INTEGER PRIMARY KEY,
     keychain_id TEXT NOT NULL UNIQUE,
@@ -192,11 +194,12 @@ enum Step {
 ///
 /// A step is history: it says what that version's change was, and stays as
 /// written when `SCHEMA` changes again.
-const STEPS: [(i64, Step); 1] = [(
-    13,
-    // The command snippets.
-    Step::Sql(
-        "BEGIN;
+const STEPS: [(i64, Step); 2] = [
+    (
+        13,
+        // The command snippets.
+        Step::Sql(
+            "BEGIN;
 CREATE TABLE snippet_categories (
     id   INTEGER PRIMARY KEY,
     name TEXT NOT NULL CHECK (name <> '')
@@ -216,8 +219,15 @@ CREATE INDEX snippets_scope_group_id ON snippets(scope_group_id);
 CREATE INDEX snippets_scope_host_id ON snippets(scope_host_id);
 PRAGMA user_version = 14;
 COMMIT;",
+        ),
     ),
-)];
+    (
+        14,
+        Step::Sql(
+            "BEGIN; ALTER TABLE groups ADD COLUMN public_id TEXT; CREATE UNIQUE INDEX groups_public_id ON groups(public_id); PRAGMA user_version = 15; COMMIT;",
+        ),
+    ),
+];
 
 /// Everything one launch reads back from disk.
 pub struct StoredData {
@@ -246,6 +256,65 @@ pub struct HostDatabase {
 }
 
 impl HostDatabase {
+    /// 云清单一次提交；先解除分组层级，避免删除旧分组时误删保留的主机。
+    pub fn replace_inventory(&self, inventory: &super::HostInventory) -> rusqlite::Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        transaction.execute_batch("DELETE FROM host_jumps; UPDATE groups SET parent_id = NULL; UPDATE hosts SET group_id = NULL;")?;
+        for group in &inventory.groups {
+            transaction.execute(
+                "INSERT INTO groups (id, public_id, name, sort_order, expanded) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(id) DO UPDATE SET name = excluded.name, sort_order = excluded.sort_order, expanded = excluded.expanded",
+                params![to_sql(group.id.0), group.public_id.as_str(), group.name.as_ref(), group.sort_order, group.expanded],
+            )?;
+        }
+        let old = self.load()?;
+        for group in old
+            .groups
+            .iter()
+            .filter(|old| !inventory.groups.iter().any(|new| new.id == old.id))
+        {
+            transaction.execute("DELETE FROM groups WHERE id = ?1", [to_sql(group.id.0)])?;
+        }
+        for credential in &inventory.credentials {
+            transaction.execute(
+                "INSERT INTO credentials (id, keychain_id, name, kind, username, key_path, sort_order) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind, username = excluded.username, key_path = excluded.key_path, sort_order = excluded.sort_order",
+                params![to_sql(credential.id.0), credential.keychain_id.as_str(), credential.name.as_ref(), credential.kind.as_str(), credential.user.as_ref(), credential.key_path.as_deref(), credential.sort_order],
+            )?;
+        }
+        for host in &inventory.hosts {
+            let row = HostRow::of(host);
+            transaction.execute(
+                "INSERT INTO hosts (id, public_id, group_id, sort_order, name, address, port, auth, username, credential_id, route, proxy_kind, proxy_host, proxy_port, proxy_username, notes) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) ON CONFLICT(id) DO UPDATE SET group_id = excluded.group_id, sort_order = excluded.sort_order, name = excluded.name, address = excluded.address, port = excluded.port, auth = excluded.auth, username = excluded.username, credential_id = excluded.credential_id, route = excluded.route, proxy_kind = excluded.proxy_kind, proxy_host = excluded.proxy_host, proxy_port = excluded.proxy_port, proxy_username = excluded.proxy_username, notes = excluded.notes",
+                params![to_sql(host.id.0), host.public_id.as_str(), host.group.map(|id| to_sql(id.0)), host.sort_order, host.name.as_ref(), host.address.as_ref(), host.port, row.auth, row.username, row.credential, row.route, row.proxy_kind, row.proxy_host, row.proxy_port, row.proxy_username, host.notes.as_ref()],
+            )?;
+        }
+        for host in old
+            .hosts
+            .iter()
+            .filter(|old| !inventory.hosts.iter().any(|new| new.id == old.id))
+        {
+            transaction.execute("DELETE FROM hosts WHERE id = ?1", [to_sql(host.id.0)])?;
+        }
+        for credential in old
+            .credentials
+            .iter()
+            .filter(|old| !inventory.credentials.iter().any(|new| new.id == old.id))
+        {
+            transaction.execute(
+                "DELETE FROM credentials WHERE id = ?1",
+                [to_sql(credential.id.0)],
+            )?;
+        }
+        for host in &inventory.hosts {
+            write_jumps(&transaction, host)?;
+        }
+        for group in &inventory.groups {
+            transaction.execute(
+                "UPDATE groups SET parent_id = ?2 WHERE id = ?1",
+                params![to_sql(group.id.0), group.parent.map(|id| to_sql(id.0))],
+            )?;
+        }
+        transaction.commit()
+    }
     /// Open the database at `path`, creating it if it is not there yet.
     pub fn open(path: &Path) -> rusqlite::Result<Self> {
         Self::prepare(Connection::open(path)?)
@@ -268,9 +337,10 @@ impl HostDatabase {
     }
 
     pub fn load(&self) -> rusqlite::Result<StoredData> {
+        fill_missing_group_ids(&self.connection)?;
         let groups = self
             .connection
-            .prepare("SELECT id, name, parent_id, sort_order, expanded FROM groups ORDER BY id")?
+            .prepare("SELECT id, name, parent_id, sort_order, expanded, public_id FROM groups ORDER BY id")?
             .query_map([], |row| {
                 let id: i64 = row.get(0)?;
                 let name: String = row.get(1)?;
@@ -281,6 +351,7 @@ impl HostDatabase {
                 );
                 group.sort_order = row.get(3)?;
                 group.expanded = row.get(4)?;
+                group.public_id = PublicId::from_stored(row.get(5)?);
                 Ok(group)
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -522,13 +593,14 @@ impl HostDatabase {
 
     pub fn insert_group(&self, group: &HostGroup) -> rusqlite::Result<()> {
         self.connection.execute(
-            "INSERT INTO groups (id, name, parent_id, sort_order, expanded) VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO groups (id, name, parent_id, sort_order, expanded, public_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 to_sql(group.id.0),
                 group.name.as_ref(),
                 group.parent.map(|parent| to_sql(parent.0)),
                 group.sort_order,
                 group.expanded,
+                group.public_id.as_str(),
             ],
         )?;
         Ok(())
@@ -1055,6 +1127,7 @@ fn back_up(connection: &Connection, version: i64) {
 /// hand with `sqlite3`. Runs at every open; once every host has an id it
 /// is one query that finds nothing.
 fn fill_missing_public_ids(connection: &mut Connection) -> rusqlite::Result<()> {
+    fill_missing_group_ids(connection)?;
     let missing = connection
         .prepare("SELECT id FROM hosts WHERE public_id IS NULL")?
         .query_map([], |row| row.get::<_, i64>(0))?
@@ -1074,6 +1147,31 @@ fn fill_missing_public_ids(connection: &mut Connection) -> rusqlite::Result<()> 
             update.execute(params![id, public_id.as_str()])?;
             taken.insert(public_id);
         }
+    }
+    transaction.commit()
+}
+
+/// 为升级前的分组分配同步标识，已有标识永远保留。
+fn fill_missing_group_ids(connection: &Connection) -> rusqlite::Result<()> {
+    let missing = connection
+        .prepare("SELECT id FROM groups WHERE public_id IS NULL")?
+        .query_map([], |row| row.get::<_, i64>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let mut taken = connection
+        .prepare("SELECT public_id FROM groups WHERE public_id IS NOT NULL")?
+        .query_map([], |row| row.get::<_, String>(0).map(PublicId::from_stored))?
+        .collect::<rusqlite::Result<HashSet<_>>>()?;
+    let transaction = connection.unchecked_transaction()?;
+    for id in missing {
+        let public_id = PublicId::generate_unused(|candidate| taken.contains(candidate));
+        transaction.execute(
+            "UPDATE groups SET public_id = ?2 WHERE id = ?1",
+            params![id, public_id.as_str()],
+        )?;
+        taken.insert(public_id);
     }
     transaction.commit()
 }
@@ -1323,6 +1421,76 @@ CREATE INDEX forwards_host_id ON forwards(host_id);";
         let data = db.load().unwrap();
         assert_eq!(data.hosts.len(), 1);
         assert!(data.snippets.is_empty());
+    }
+
+    #[test]
+    fn version_14_groups_receive_stable_sync_ids_without_losing_the_tree() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(SCHEMA_13).unwrap();
+        if let Step::Sql(sql) = &STEPS[0].1 {
+            connection.execute_batch(sql).unwrap();
+        }
+        connection
+            .execute("INSERT INTO groups (id, name) VALUES (1, '生产')", [])
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO groups (id, parent_id, name) VALUES (2, 1, '数据库')",
+                [],
+            )
+            .unwrap();
+        let database = HostDatabase::prepare(connection).unwrap();
+        let loaded = database.load().unwrap();
+        assert_eq!(loaded.groups[1].parent, Some(GroupId(1)));
+        let ids: Vec<_> = loaded
+            .groups
+            .iter()
+            .map(|group| group.public_id.clone())
+            .collect();
+        assert_ne!(ids[0], ids[1]);
+        assert_eq!(
+            ids,
+            database
+                .load()
+                .unwrap()
+                .groups
+                .iter()
+                .map(|group| group.public_id.clone())
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            schema_of(&database.connection),
+            schema_of(&HostDatabase::in_memory().unwrap().connection)
+        );
+    }
+
+    #[test]
+    fn inventory_replacement_preserves_retained_hosts_when_their_old_parent_is_deleted() {
+        let database = HostDatabase::in_memory().unwrap();
+        let root = group(1, "旧父分组", None);
+        let mut child = group(2, "保留分组", Some(1));
+        database.insert_group(&root).unwrap();
+        database.insert_group(&child).unwrap();
+        let kept = host(1, "保留主机", Some(2));
+        let deleted = host(2, "删除主机", Some(1));
+        database.insert_host(&kept).unwrap();
+        database.insert_host(&deleted).unwrap();
+        database
+            .insert_bookmark(kept.id, BookmarkSide::Remote, "/srv")
+            .unwrap();
+        child.parent = None;
+        database
+            .replace_inventory(&super::super::HostInventory::new(
+                vec![child],
+                vec![kept.clone()],
+                Vec::new(),
+            ))
+            .unwrap();
+        let loaded = database.load().unwrap();
+        assert_eq!(loaded.hosts.len(), 1);
+        assert_eq!(loaded.hosts[0].public_id, kept.public_id);
+        assert_eq!(loaded.groups[0].id, GroupId(2));
+        assert_eq!(loaded.bookmarks.len(), 1);
     }
 
     fn snippet(id: u64, name: &str, category: Option<u64>, scope: SnippetScope) -> Snippet {

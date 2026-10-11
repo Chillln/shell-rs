@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -19,6 +19,7 @@ use super::{
     ProxyLogin, PublicId, Route, Snippet, SnippetCategory, SnippetScope, SshLink, StoredData,
 };
 
+mod inventory;
 mod snippets;
 
 /// The single source of truth for hosts, groups, the rules that belong
@@ -55,6 +56,7 @@ mod snippets;
 /// `sftp://` link (外部连接, see [`SshLink`]) and whose terminals get one
 /// channel alone.
 pub struct HostStore {
+    secret_revision: Cell<u64>,
     groups: Vec<HostGroup>,
     hosts: Vec<Host>,
     /// Hosts connected to without saving them: not listed. Their ids come
@@ -182,6 +184,7 @@ impl Change {
 /// error: writing it when `writing`, deleting it otherwise.
 fn secret_failure(secret: &SecretRef, writing: bool) -> fn(&str) -> SharedString {
     match (secret, writing) {
+        (SecretRef::CloudSync { .. }, _) => |error| t!("sync.error.keychain", error = error),
         (SecretRef::Password { .. }, true) => {
             |error| t!("host.store.secret.password_write", error = error)
         }
@@ -233,6 +236,7 @@ impl HostStore {
     /// An empty memory-only store.
     pub fn empty() -> Self {
         Self {
+            secret_revision: Cell::new(0),
             groups: Vec::new(),
             hosts: Vec::new(),
             temporary: Vec::new(),
@@ -298,6 +302,7 @@ impl HostStore {
             host.credential = draft.credential;
         }
         Ok(Self {
+            secret_revision: Cell::new(0),
             next_group_id: groups.iter().map(|group| group.id.0).max().unwrap_or(0) + 1,
             next_host_id: hosts.iter().map(|s| s.id.0).max().unwrap_or(0) + 1,
             next_forward_id: forwards.iter().map(|rule| rule.id.0).max().unwrap_or(0) + 1,
@@ -1542,6 +1547,8 @@ impl HostStore {
             .filter(|path| self.keeps_key(path) && self.key_file_users(path) == 1)
             .map(Path::new);
         let path = write_key_file(dir, replace, text)?;
+        self.secret_revision
+            .set(self.secret_revision.get().wrapping_add(1));
         Ok(path.display().to_string().into())
     }
 
@@ -1600,6 +1607,8 @@ impl HostStore {
         value: Option<String>,
         cx: &mut Context<Self>,
     ) -> Task<Result<(), SharedString>> {
+        self.secret_revision
+            .set(self.secret_revision.get().wrapping_add(1));
         let secrets = self.secrets();
         let failure = secret_failure(&secret, value.is_some());
         cx.spawn(async move |this, cx| {
