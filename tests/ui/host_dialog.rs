@@ -399,7 +399,38 @@ async fn a_host_behind_a_proxy_keeps_the_proxys_password_in_the_keychain(cx: &mu
     );
     cx.update(|cx| {
         let store = workspace.read(cx).store().read(cx);
-        assert_eq!(store.hosts()[0].route, Route::Proxy(proxy));
+        assert_eq!(store.hosts()[0].route, Route::Proxy(proxy.clone()));
+        assert_eq!(store.proxy_profiles(), &[proxy]);
+    });
+
+    // 新建另一台主机时直接套用刚保存的代理。
+    in_frame(cx, handle, |window, cx| window.click("host-search", cx));
+    in_frame(cx, handle, |window, cx| window.click("new-host-panel", cx));
+    in_frame(cx, handle, |window, cx| {
+        window.click("host-name", cx);
+        window.input("another", cx);
+        window.click("host-address", cx);
+        window.input("203.0.113.8", cx);
+        window.within("host-route").click(2usize, cx);
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.within("host-proxy-profile").click("input", cx);
+    });
+    in_frame(cx, handle, |window, cx| window.press("down", cx));
+    in_frame(cx, handle, |window, cx| window.press("enter", cx));
+    in_frame(cx, handle, |window, cx| {
+        assert_eq!(window.find("host-proxy-kind").value(), Some("SOCKS5 代理"));
+        assert_eq!(window.find("host-proxy-host").value(), Some("127.0.0.1"));
+        assert_eq!(window.find("host-proxy-port").value(), Some("7890"));
+        assert_eq!(window.find("host-proxy-user").value(), Some("me"));
+        window.click("commit", cx);
+    });
+    wait_for_dialog_to_close(cx, handle).await;
+    cx.update(|cx| {
+        let store = workspace.read(cx).store().read(cx);
+        assert_eq!(store.hosts().len(), 2);
+        assert_eq!(store.hosts()[1].route, store.hosts()[0].route);
+        assert_eq!(store.proxy_profiles().len(), 1);
     });
 }
 

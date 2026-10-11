@@ -11,7 +11,7 @@ use gpui_kit::component::{
     input::{Input, InputState, Textarea, TextareaState},
     notification::Notification,
     searchable_list::{SearchableListItem, SearchableVec},
-    select::{Select, SelectState},
+    select::{Select, SelectEvent, SelectState},
     tag::Tag,
     v_flex,
 };
@@ -158,13 +158,49 @@ impl SearchableListItem for JumpHost {
 
 type JumpPicker = ComboboxState<SearchableVec<JumpHost>>;
 
+/// 常用代理列表只展示公开的端点信息，密码仍从钥匙串按端点读取。
+fn proxy_profile_label(proxy: &ProxySettings) -> SharedString {
+    match &proxy.user {
+        Some(user) => format!(
+            "{} · {}@{}:{}",
+            proxy.kind.label(),
+            user,
+            proxy.host,
+            proxy.port
+        )
+        .into(),
+        None => format!("{} · {}:{}", proxy.kind.label(), proxy.host, proxy.port).into(),
+    }
+}
+
+#[derive(Clone)]
+struct ProxyProfileOption {
+    index: usize,
+    label: SharedString,
+}
+
+impl SearchableListItem for ProxyProfileOption {
+    type Value = usize;
+
+    fn title(&self) -> SharedString {
+        self.label.clone()
+    }
+
+    fn render(&self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        div().min_w_0().truncate().child(self.label.clone())
+    }
+
+    fn value(&self) -> &usize {
+        &self.index
+    }
+}
+
 /// The body of the new/edit host dialog. Owns the field states and
 /// validates on commit; the store is only touched when validation passes.
 pub struct HostForm {
     store: Entity<HostStore>,
     editing: Option<HostId>,
-    /// A 临时连接's form: no group, route or notes, a name it may leave out,
-    /// and a commit that saves nothing.
+    /// 临时连接不填写分组或备注，名称可留空；只保存可复用的代理配置。
     temporary: bool,
     name: Entity<InputState>,
     address: Entity<InputState>,
@@ -192,6 +228,9 @@ pub struct HostForm {
     jump_hosts: Vec<JumpHost>,
     jump_picker: Entity<JumpPicker>,
     proxy_kind: Entity<SelectState<Vec<SharedString>>>,
+    /// 常用代理的选项与下拉框顺序一致；选中后复制到可编辑字段。
+    proxy_profiles: Vec<ProxySettings>,
+    proxy_profile: Entity<SelectState<Vec<ProxyProfileOption>>>,
     proxy_host: Entity<InputState>,
     proxy_port: Entity<InputState>,
     proxy_user: Entity<InputState>,
@@ -215,7 +254,7 @@ impl HostForm {
         cx: &mut Context<Self>,
     ) -> Self {
         let secrets = store.read(cx).secrets();
-        let (draft, options, credentials, key_dir, editing_connected, jump_hosts) = {
+        let (draft, options, credentials, key_dir, editing_connected, jump_hosts, proxy_profiles) = {
             let read = store.read(cx);
             (
                 editing.and_then(|id| read.host(id)).map(Host::draft),
@@ -230,6 +269,7 @@ impl HostForm {
                     .filter(|host| Some(host.id) != editing)
                     .map(JumpHost::of)
                     .collect::<Vec<_>>(),
+                read.proxy_profiles().to_vec(),
             )
         };
         // A host with no group sits at the root of the tree, which is where
@@ -313,6 +353,25 @@ impl HostForm {
             Route::Proxy(proxy) => Some(proxy.clone()),
             _ => None,
         };
+        let proxy_profile_ix = proxy
+            .as_ref()
+            .and_then(|proxy| proxy_profiles.iter().position(|saved| saved == proxy));
+        let proxy_profile = cx.new(|cx| {
+            SelectState::new(
+                proxy_profiles
+                    .iter()
+                    .enumerate()
+                    .map(|(index, proxy)| ProxyProfileOption {
+                        index,
+                        label: proxy_profile_label(proxy),
+                    })
+                    .collect::<Vec<_>>(),
+                proxy_profile_ix.map(IndexPath::new),
+                window,
+                cx,
+            )
+            .searchable(true)
+        });
         let proxy_kind_ix = ProxyKind::ALL
             .iter()
             .position(|kind| Some(*kind) == proxy.as_ref().map(|proxy| proxy.kind))
@@ -375,6 +434,15 @@ impl HostForm {
             cx.observe(&credential, |_, _, cx| cx.notify()),
             cx.observe(&fields, |_, _, cx| cx.notify()),
             cx.subscribe_in(
+                &proxy_profile,
+                window,
+                |this, _, event: &SelectEvent<Vec<ProxyProfileOption>>, window, cx| {
+                    if let SelectEvent::Confirm(Some(index)) = event {
+                        this.apply_proxy_profile(*index, window, cx);
+                    }
+                },
+            ),
+            cx.subscribe_in(
                 &jump_picker,
                 window,
                 |this, _, event: &ComboboxEvent<SearchableVec<JumpHost>>, window, cx| {
@@ -418,6 +486,8 @@ impl HostForm {
             jump_hosts,
             jump_picker,
             proxy_kind,
+            proxy_profiles,
+            proxy_profile,
             proxy_host,
             proxy_port,
             proxy_user,
@@ -430,8 +500,7 @@ impl HostForm {
         }
     }
 
-    /// The form of a 临时连接: the login of a new host, without what only a
-    /// saved host has (its group, its route, its notes).
+    /// 临时连接沿用主机表单，但不显示分组、跳板和备注。
     pub fn temporary(
         store: Entity<HostStore>,
         tester: SharedConnectionTester,
@@ -458,6 +527,42 @@ impl HostForm {
             self.route = route;
             cx.notify();
         }
+    }
+
+    /// 套用常用代理时重新建立密码字段，避免上一个代理的异步读取写入新字段。
+    fn apply_proxy_profile(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(proxy) = self.proxy_profiles.get(index).cloned() else {
+            return;
+        };
+        let kind_ix = ProxyKind::ALL
+            .iter()
+            .position(|kind| *kind == proxy.kind)
+            .unwrap_or(0);
+        self.proxy_kind.update(cx, |kind, cx| {
+            kind.set_selected_index(Some(IndexPath::new(kind_ix)), window, cx)
+        });
+        self.proxy_host.update(cx, |field, cx| {
+            field.set_value(proxy.host.clone(), window, cx)
+        });
+        self.proxy_port.update(cx, |field, cx| {
+            field.set_value(proxy.port.to_string(), window, cx)
+        });
+        self.proxy_user.update(cx, |field, cx| {
+            field.set_value(proxy.user.clone().unwrap_or_default(), window, cx)
+        });
+        self.proxy_secret
+            .update(cx, |fields, cx| fields.clear(window, cx));
+        let secrets = self.store.read(cx).secrets();
+        self.proxy_secret = cx.new(|cx| {
+            let mut fields = SecretFields::new(secrets, None, window, cx);
+            fields.set_password_placeholder(t!("host.dialog.optional"), window, cx);
+            fields
+        });
+        if let Some(secret) = proxy.password_secret() {
+            self.proxy_secret
+                .update(cx, |fields, cx| fields.load_saved(Some(secret), None, cx));
+        }
+        cx.notify();
     }
 
     /// Put `id` at the end of the jump hosts, and take it off the hosts that
@@ -737,11 +842,18 @@ impl HostForm {
             }),
             _ => None,
         };
+        let proxy_profile = match &route {
+            Route::Proxy(proxy) => Some(proxy.clone()),
+            _ => None,
+        };
         let notes = self.notes.read(cx).value().trim().to_string();
         let draft = draft.with_route(route).with_notes(notes);
 
         let editing = self.editing;
         self.store.update(cx, |store, cx| {
+            if let Some(proxy) = proxy_profile {
+                store.remember_proxy(proxy, cx);
+            }
             match editing {
                 Some(id) => {
                     store.update(id, draft, cx);
@@ -764,23 +876,25 @@ impl HostForm {
         true
     }
 
-    /// Validate and connect without saving: the host goes into the store's
-    /// memory, its password into the store's memory too, never the
-    /// keychain. The host to connect to, or `None` when the form said what
-    /// is wrong.
+    /// 临时主机和登录密码留在内存；代理配置独立保存以供下次复用。
     pub fn commit_temporary(
         &mut self,
+        dispatch: FocusHandle,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<HostId> {
-        let checked = self
-            .endpoint(cx)
-            .and_then(|endpoint| Ok((endpoint, self.committed_login(cx)?)));
-        let ((host, port), login) = match checked {
+    ) -> bool {
+        let checked = self.endpoint(cx).and_then(|endpoint| {
+            Ok((
+                endpoint,
+                self.committed_login(cx)?,
+                self.committed_route(cx)?,
+            ))
+        });
+        let ((host, port), login, route) = match checked {
             Ok(checked) => checked,
             Err(error) => {
                 window.push_notification(form_error_notification(error), cx);
-                return None;
+                return false;
             }
         };
         let name = self.name.read(cx).value().trim().to_string();
@@ -804,12 +918,51 @@ impl HostForm {
                 HostDraft::new(name, host, port, user, auth, None)
             }
         };
-        let id = self
-            .store
-            .update(cx, |store, cx| store.insert_temporary(draft, password, cx));
+        let proxy_profile = match &route {
+            Route::Proxy(proxy) => Some(proxy.clone()),
+            _ => None,
+        };
+        let proxy_change = proxy_profile.as_ref().and_then(|proxy| {
+            proxy.password_secret().and_then(|secret| {
+                self.proxy_secret
+                    .read(cx)
+                    .password_change(cx)
+                    .map(|change| (secret, change))
+            })
+        });
+        let draft = draft.with_route(route);
+        let store = self.store.clone();
+        let (id, write) = store.update(cx, |store, cx| {
+            if let Some(proxy) = proxy_profile {
+                store.remember_proxy(proxy, cx);
+            }
+            let id = store.insert_temporary(draft, password, cx);
+            let write = proxy_change.map(|(secret, change)| store.write_secret(secret, change, cx));
+            (id, write)
+        });
         self.fields
             .update(cx, |fields, cx| fields.clear(window, cx));
-        Some(id)
+        self.proxy_secret
+            .update(cx, |fields, cx| fields.clear(window, cx));
+        if let Some(write) = write {
+            cx.spawn_in(window, async move |_, cx| {
+                if write.await.is_ok() {
+                    let _ = cx.update(|window, cx| {
+                        dispatch.dispatch_action(&ConnectHost(id), window, cx)
+                    });
+                } else {
+                    let _ = cx.update(|_, cx| {
+                        store.update(cx, |store, cx| store.remove_temporary(id, cx));
+                    });
+                }
+            })
+            .detach();
+        } else {
+            window.defer(cx, move |window, cx| {
+                dispatch.dispatch_action(&ConnectHost(id), window, cx)
+            });
+        }
+        true
     }
 
     /// The fields of a host that logs in on its own: its user, and its
@@ -873,14 +1026,24 @@ impl HostForm {
     /// 「连接方式」: the choice, and below it what the choice needs.
     fn route_field(&self, cx: &mut Context<Self>) -> Field {
         let route = self.route;
+        let choices: &[RouteChoice] = if self.temporary {
+            &[RouteChoice::Direct, RouteChoice::Proxy]
+        } else {
+            &RouteChoice::ALL
+        };
         let choice = SegmentedControl::new("host-route")
-            .selected_index(RouteChoice::ALL.iter().position(|each| *each == route))
+            .selected_index(choices.iter().position(|each| *each == route))
             .on_change(cx.listener(|this, ix: &usize, _, cx| {
-                if let Some(route) = RouteChoice::ALL.get(*ix) {
+                let choices: &[RouteChoice] = if this.temporary {
+                    &[RouteChoice::Direct, RouteChoice::Proxy]
+                } else {
+                    &RouteChoice::ALL
+                };
+                if let Some(route) = choices.get(*ix) {
                     this.set_route(*route, cx);
                 }
             }))
-            .segments(RouteChoice::ALL.map(|each| Segment::new(each.label())));
+            .segments(choices.iter().map(|each| Segment::new(each.label())));
         let details = match route {
             RouteChoice::Direct => None,
             RouteChoice::Jump => Some(self.jump_box(cx).into_any_element()),
@@ -1098,6 +1261,19 @@ impl HostForm {
             .child(
                 Form::new()
                     .columns(4)
+                    .when(!self.proxy_profiles.is_empty(), |form| {
+                        form.child(
+                            Field::new()
+                                .label(t!("host.dialog.proxy_profile"))
+                                .col_span(4)
+                                .child(
+                                    Select::new(&self.proxy_profile)
+                                        .id("host-proxy-profile")
+                                        .placeholder(t!("host.dialog.proxy_profile_placeholder"))
+                                        .small(),
+                                ),
+                        )
+                    })
                     .child(
                         Field::new()
                             .label(t!("host.dialog.proxy_kind"))
@@ -1211,9 +1387,9 @@ impl Render for HostForm {
             Some(auth) => self.own_fields(form, auth, cx),
             None => form.child(self.credential_field(cx)),
         };
-        // What only a saved host has.
+        // 分组和备注只属于保存的主机，临时连接也可选用代理。
         let form = if self.temporary {
-            form
+            form.child(self.route_field(cx))
         } else {
             form.child(
                 Field::new()
@@ -1473,18 +1649,9 @@ pub fn open_temporary_connection_dialog(
                     let form = form.clone();
                     let dispatch = dispatch.clone();
                     move |_, window, cx| {
-                        let Some(host) =
-                            form.update(cx, |form, cx| form.commit_temporary(window, cx))
-                        else {
-                            return false;
-                        };
-                        // After the dialog is gone, so the new tab keeps the
-                        // focus it takes.
-                        let dispatch = dispatch.clone();
-                        window.defer(cx, move |window, cx| {
-                            dispatch.dispatch_action(&ConnectHost(host), window, cx)
-                        });
-                        true
+                        form.update(cx, |form, cx| {
+                            form.commit_temporary(dispatch.clone(), window, cx)
+                        })
                     }
                 })
                 .on_close(|_, window, cx| dismiss_form_error(window, cx))

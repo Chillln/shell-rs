@@ -27,7 +27,7 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
 
-数据目录默认是系统应用数据目录中的 `shellrs`，可通过 `SHELLRS_DATA_DIR` 覆盖。主机、端口转发规则和凭据（不含密码）保存在 `shellrs.db`，主机信任记录保存在该目录的 `known_hosts`，凭据里粘贴或生成的私钥保存在该目录的 `keys/` 下，密码和私钥口令使用系统钥匙串（服务名 `shellrs`；账户名是主机端点的 `password:<用户>@<地址>:<端口>`、私钥的 `passphrase:<路径>`、密码凭据的 `credential:<随机 ID>` 和代理的 `proxy:<用户>@<代理地址>:<端口>`）。
+数据目录默认是系统应用数据目录中的 `shellrs`，可通过 `SHELLRS_DATA_DIR` 覆盖。主机、常用代理配置、端口转发规则和凭据（不含密码）保存在 `shellrs.db`，主机信任记录保存在该目录的 `known_hosts`，凭据里粘贴或生成的私钥保存在该目录的 `keys/` 下，密码和私钥口令使用系统钥匙串（服务名 `shellrs`；账户名是主机端点的 `password:<用户>@<地址>:<端口>`、私钥的 `passphrase:<路径>`、密码凭据的 `credential:<随机 ID>` 和代理的 `proxy:<用户>@<代理地址>:<端口>`）。
 
 `src/sftp/tests.rs` 使用临时目录与故障注入覆盖上传和下载的文件内容、空目录、链接、覆盖、权限、取消、源文件变化、乱序与短读、续传及替换各阶段恢复，以及删除、重命名、新建和递归改权限不跟随链接。Unix 协议测试使用本机 OpenSSH `sftp-server`（macOS `/usr/libexec/sftp-server`，Linux `/usr/lib/openssh/sftp-server`）；工作线程测试仅监听 `127.0.0.1` 的随机端口，使用测试凭据。限制本地套接字的沙箱会跳过该部分，需要在允许回环套接字的环境运行。
 

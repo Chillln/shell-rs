@@ -208,8 +208,8 @@ host.dialog.reconnect_note:
   zh-CN: 保存后连接设置将立即生效并重连。
   en: Saving applies the connection settings at once and reconnects.
 host.dialog.temporary_note:
-  zh-CN: 仅当前使用的临时会话，不会保存到主机列表。
-  en: For this connection only. It won’t be added to your hosts.
+  zh-CN: 临时连接不会保存为主机；使用的代理会单独保存，供以后复用。
+  en: This connection won’t be saved as a host. Its proxy will be saved separately for reuse.
 
 host.dialog.route:
   zh-CN: 连接方式
@@ -250,6 +250,12 @@ host.dialog.all_hosts_added:
 host.dialog.proxy_kind:
   zh-CN: 代理类型
   en: Proxy type
+host.dialog.proxy_profile:
+  zh-CN: 从已保存代理填入
+  en: Fill from a saved proxy
+host.dialog.proxy_profile_placeholder:
+  zh-CN: 选择代理，填入下方设置
+  en: Choose a proxy to fill the fields below
 host.dialog.proxy_address:
   zh-CN: 代理地址
   en: Proxy address
@@ -257,8 +263,8 @@ host.dialog.proxy_host_placeholder:
   zh-CN: 例如 127.0.0.1
   en: e.g. 127.0.0.1
 host.dialog.proxy_note:
-  zh-CN: 目标地址由代理服务器解析；代理不需要认证时，用户名和密码留空。
-  en: The proxy server resolves the host’s address. Leave the username and password empty if the proxy doesn’t need them.
+  zh-CN: 代理设置会单独保存以供复用，密码保存在系统钥匙串。代理不需要认证时，用户名和密码留空。
+  en: The proxy is saved separately for reuse; its password stays in the system keychain. Leave the username and password empty if the proxy needs no authentication.
 host.dialog.proxy_password_needs_user:
   zh-CN: 填写代理密码时请同时填写用户名
   en: Enter a username to go with the proxy password
@@ -495,6 +501,9 @@ host.store.not_saved.new_host:
 host.store.not_saved.save_host:
   zh-CN: 保存主机未能保存到本地数据库：%{error}
   en: "Couldn’t save the host’s changes to the local database: %{error}"
+host.store.not_saved.proxy_profile:
+  zh-CN: 常用代理未能保存到本地数据库：%{error}
+  en: "Couldn’t save the proxy to the local database: %{error}"
 host.store.not_saved.delete_host:
   zh-CN: 删除主机未能保存到本地数据库：%{error}
   en: "Couldn’t delete the host from the local database: %{error}"

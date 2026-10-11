@@ -35,10 +35,9 @@ fn from_sql(id: i64) -> u64 {
 /// The schema's version, stored in `PRAGMA user_version`. A change to the
 /// schema bumps it and gives `migrate` a step from the version before.
 ///
-/// 13 is the schema as it was rebuilt before the first release. Versions up
-/// to 12 were development builds, and their files are refused. 14 adds the
-/// command snippets. 15 增加分组的稳定同步标识。
-const SCHEMA_VERSION: i64 = 15;
+/// 13 是首次发布前重建的结构；12 及更早的开发版数据库不再支持。
+/// 14 增加命令片段，15 增加分组的稳定同步标识，16 增加独立保存的代理配置。
+const SCHEMA_VERSION: i64 = 16;
 
 /// The whole schema, as a new database gets it.
 ///
@@ -63,6 +62,7 @@ const SCHEMA_VERSION: i64 = 15;
 ///     next open (see `fill_missing_public_ids`); the ones there are unique.
 ///   - `os` and `last_connected_at` are written by connections, not by the
 ///     host form.
+/// - **proxy_profiles** 独立保存常用代理的类型、端点和用户名；密码不入库。
 /// - **host_jumps** lists a host's jump hosts in order. A deleted jump
 ///   host leaves its row behind with no `jump_id`, so the host fails to
 ///   connect rather than skip the hop.
@@ -128,6 +128,14 @@ CREATE TABLE hosts (
 ) STRICT;
 CREATE INDEX hosts_group_id ON hosts(group_id);
 CREATE INDEX hosts_credential_id ON hosts(credential_id);
+CREATE TABLE proxy_profiles (
+    id       INTEGER PRIMARY KEY,
+    kind     TEXT NOT NULL CHECK (kind IN ('http', 'socks5')),
+    host     TEXT NOT NULL CHECK (host <> ''),
+    port     INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    username TEXT NOT NULL DEFAULT '',
+    UNIQUE (kind, host, port, username)
+) STRICT;
 CREATE TABLE host_jumps (
     host_id  INTEGER NOT NULL REFERENCES hosts(id) ON DELETE CASCADE,
     position INTEGER NOT NULL CHECK (position >= 0),
@@ -194,7 +202,7 @@ enum Step {
 ///
 /// A step is history: it says what that version's change was, and stays as
 /// written when `SCHEMA` changes again.
-const STEPS: [(i64, Step); 2] = [
+const STEPS: [(i64, Step); 3] = [
     (
         13,
         // The command snippets.
@@ -227,6 +235,25 @@ COMMIT;",
             "BEGIN; ALTER TABLE groups ADD COLUMN public_id TEXT; CREATE UNIQUE INDEX groups_public_id ON groups(public_id); PRAGMA user_version = 15; COMMIT;",
         ),
     ),
+    (
+        15,
+        Step::Sql(
+            "BEGIN;
+CREATE TABLE proxy_profiles (
+    id       INTEGER PRIMARY KEY,
+    kind     TEXT NOT NULL CHECK (kind IN ('http', 'socks5')),
+    host     TEXT NOT NULL CHECK (host <> ''),
+    port     INTEGER NOT NULL CHECK (port BETWEEN 1 AND 65535),
+    username TEXT NOT NULL DEFAULT '',
+    UNIQUE (kind, host, port, username)
+) STRICT;
+INSERT OR IGNORE INTO proxy_profiles (kind, host, port, username)
+    SELECT proxy_kind, proxy_host, proxy_port, COALESCE(proxy_username, '')
+    FROM hosts WHERE route = 'proxy';
+PRAGMA user_version = 16;
+COMMIT;",
+        ),
+    ),
 ];
 
 /// Everything one launch reads back from disk.
@@ -237,6 +264,8 @@ pub struct StoredData {
     /// credential has no user name of its own here; the store copies the
     /// credential's in.
     pub hosts: Vec<Host>,
+    /// 代理配置与主机独立保存，主机删除后仍可用于新连接。
+    pub proxy_profiles: Vec<ProxySettings>,
     /// Hosts that have ever connected, most recently connected first.
     pub recent: Vec<HostId>,
     /// SFTP bookmarks in the order they were added.
@@ -555,9 +584,27 @@ impl HostDatabase {
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
 
+        let proxy_profiles = self
+            .connection
+            .prepare("SELECT kind, host, port, username FROM proxy_profiles ORDER BY id")?
+            .query_map([], |row| {
+                let kind: String = row.get(0)?;
+                let host: String = row.get(1)?;
+                let port: u16 = row.get(2)?;
+                let user: String = row.get(3)?;
+                Ok(ProxySettings::new(
+                    ProxyKind::from_stored(&kind).expect("validated proxy kind"),
+                    host,
+                    port,
+                )
+                .with_user(user))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+
         Ok(StoredData {
             groups,
             hosts,
+            proxy_profiles,
             recent,
             bookmarks,
             forwards,
@@ -717,6 +764,20 @@ impl HostDatabase {
     pub fn remove_host(&self, id: HostId) -> rusqlite::Result<()> {
         self.connection
             .execute("DELETE FROM hosts WHERE id = ?1", params![to_sql(id.0)])?;
+        Ok(())
+    }
+
+    /// 保存可在新建主机和临时连接中复用的代理配置；密码只放在钥匙串。
+    pub fn save_proxy_profile(&self, proxy: &ProxySettings) -> rusqlite::Result<()> {
+        self.connection.execute(
+            "INSERT INTO proxy_profiles (kind, host, port, username) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(kind, host, port, username) DO NOTHING",
+            params![
+                proxy.kind.as_str(),
+                proxy.host.as_ref(),
+                proxy.port,
+                proxy.user.as_deref().unwrap_or_default(),
+            ],
+        )?;
         Ok(())
     }
 
@@ -1217,6 +1278,7 @@ mod tests {
         let data = db.load().unwrap();
         assert!(data.groups.is_empty());
         assert!(data.hosts.is_empty());
+        assert!(data.proxy_profiles.is_empty());
         assert!(data.recent.is_empty());
         assert!(data.forwards.is_empty());
     }
@@ -1707,6 +1769,42 @@ CREATE INDEX forwards_host_id ON forwards(host_id);";
     }
 
     #[test]
+    fn proxy_profiles_remain_after_the_host_is_deleted() {
+        let db = HostDatabase::in_memory().unwrap();
+        let proxy = ProxySettings::new(ProxyKind::Socks5, "127.0.0.1", 7890).with_user("me");
+        db.save_proxy_profile(&proxy).unwrap();
+        db.save_proxy_profile(&proxy).unwrap();
+        db.insert_host(&routed(host(1, "box", None), Route::Proxy(proxy.clone())))
+            .unwrap();
+        db.remove_host(HostId(1)).unwrap();
+        let data = db.load().unwrap();
+        assert!(data.hosts.is_empty());
+        assert_eq!(data.proxy_profiles, [proxy]);
+    }
+
+    #[test]
+    fn version_15_imports_existing_host_proxies_as_profiles() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shellrs.db");
+        {
+            let db = HostDatabase::open(&path).unwrap();
+            let proxy = ProxySettings::new(ProxyKind::Http, "proxy.test", 8080).with_user("me");
+            db.insert_host(&routed(host(1, "one", None), Route::Proxy(proxy.clone())))
+                .unwrap();
+            db.insert_host(&routed(host(2, "two", None), Route::Proxy(proxy)))
+                .unwrap();
+            db.connection
+                .execute_batch("DROP TABLE proxy_profiles; PRAGMA user_version = 15;")
+                .unwrap();
+        }
+        let db = HostDatabase::open(&path).unwrap();
+        let data = db.load().unwrap();
+        assert_eq!(data.proxy_profiles.len(), 1);
+        assert_eq!(data.proxy_profiles[0].host.as_ref(), "proxy.test");
+        assert_eq!(data.proxy_profiles[0].user.as_deref(), Some("me"));
+    }
+
+    #[test]
     fn the_database_refuses_a_host_that_jumps_through_itself() {
         let db = HostDatabase::in_memory().unwrap();
         let looped = routed(host(1, "web", None), Route::Jump(vec![Some(HostId(1))]));
@@ -2172,6 +2270,7 @@ CREATE INDEX forwards_host_id ON forwards(host_id);";
         for table in [
             "groups",
             "hosts",
+            "proxy_profiles",
             "host_jumps",
             "bookmarks",
             "forwards",

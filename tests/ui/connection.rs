@@ -768,8 +768,7 @@ async fn an_sftp_link_opens_an_sftp_tab_across_the_window(cx: &mut TestAppContex
     store.read_with(cx, |store, _| assert!(store.host(LINK_HOST).is_none()));
 }
 
-/// The title bar's 临时连接: a host's login without its group, route or
-/// notes, connected to with every feature and saved nowhere.
+/// 标题栏的临时连接不保存主机，可直接连接或经由代理连接。
 #[gpui_kit::test]
 async fn a_temporary_connection_has_every_feature_and_saves_nothing(cx: &mut TestAppContext) {
     use shellrs::app::CloseTerminal;
@@ -789,31 +788,27 @@ async fn a_temporary_connection_has_every_feature_and_saves_nothing(cx: &mut Tes
         window.click("temporary-connection", cx)
     });
     in_frame(cx, handle, |window, cx| {
-        // Only what a login needs.
-        assert!(window.try_find("host-route").is_none());
+        // 临时连接可选择直连或代理，不显示跳板主机。
+        assert!(window.within("host-route").try_find(2usize).is_none());
         assert!(window.try_find("host-notes").is_none());
         assert!(window.try_find("test-connection").is_some());
         assert_eq!(
             window.find("temporary-note").label(),
-            Some("仅当前使用的临时会话，不会保存到主机列表。")
+            Some("临时连接不会保存为主机；使用的代理会单独保存，供以后复用。")
         );
         // The name may be left out.
         window.click("host-address", cx);
         window.input("10.0.0.9", cx);
-        window.click("host-port", cx);
-        window.press("cmd-a", cx);
-        window.input("2222", cx);
-        window.click("host-user", cx);
-        window.press("cmd-a", cx);
-        window.input("deploy", cx);
         window.click("host-password", cx);
         window.input("p@ss", cx);
+    });
+    in_frame(cx, handle, |window, cx| {
         window.click("test-connection", cx);
     });
     // 测试连接 tries it as it would connect: directly.
     cx.wait_for(handle.into(), Duration::from_secs(3), |window, cx| {
         window.render_frame(cx);
-        window.notifications(cx).len() == 1
+        tester.routes().len() == 1
     })
     .await;
     assert_eq!(tester.routes(), [(LoginRoute::Direct, None)]);
@@ -827,7 +822,7 @@ async fn a_temporary_connection_has_every_feature_and_saves_nothing(cx: &mut Tes
     let login = remote.logins().pop().expect("connected");
     assert_eq!(
         (login.host.as_str(), login.port, login.user.as_str()),
-        ("10.0.0.9", 2222, "deploy")
+        ("10.0.0.9", 22, "root")
     );
     assert_eq!(login.method, LoginMethod::Password);
     assert_eq!(login.route, LoginRoute::Direct);
@@ -889,6 +884,127 @@ async fn a_temporary_connection_has_every_feature_and_saves_nothing(cx: &mut Tes
     });
     let saved = HostStore::load(HostDatabase::open(&path).unwrap()).unwrap();
     assert!(saved.hosts().is_empty());
+}
+
+#[gpui_kit::test]
+async fn a_temporary_connection_reuses_a_saved_proxy(cx: &mut TestAppContext) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().join("shellrs.db");
+    let proxy = ProxySettings::new(ProxyKind::Http, "proxy.test", 8080).with_user("me");
+    let db = HostDatabase::open(&path).unwrap();
+    db.save_proxy_profile(&proxy).unwrap();
+    let keychain = Arc::new(InMemorySecretStore::default());
+    keychain
+        .set(&SecretRef::proxy("me", "proxy.test", 8080), "secret")
+        .unwrap();
+    let store = HostStore::load(db).unwrap().with_secrets(keychain);
+    let remote = Arc::new(RecordingRemoteProvider::default());
+    let (handle, workspace) = open_workspace_with_credentials(
+        cx,
+        store,
+        remote.clone(),
+        Arc::new(FakeConnectionTester::default()),
+    );
+
+    in_frame(cx, handle, |window, cx| {
+        window.click("temporary-connection", cx)
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.click("host-address", cx);
+        window.input("target.test", cx);
+        window.within("host-auth-source").click(2usize, cx);
+        window.within("host-route").click(1usize, cx);
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.within("host-proxy-profile").click("input", cx);
+    });
+    in_frame(cx, handle, |window, cx| window.press("down", cx));
+    in_frame(cx, handle, |window, cx| window.press("enter", cx));
+    in_frame(cx, handle, |window, cx| {
+        assert_eq!(window.find("host-proxy-host").value(), Some("proxy.test"));
+        assert_eq!(window.find("host-proxy-port").value(), Some("8080"));
+        assert_eq!(window.find("host-proxy-user").value(), Some("me"));
+        window.click("commit", cx);
+    });
+    cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
+        window.render_frame(cx);
+        window.find("status-connection").label() == Some("已连接 target.test")
+    })
+    .await;
+    let login = remote.logins().pop().expect("已建立连接");
+    assert_eq!(login.route, LoginRoute::Proxy((&proxy).into()));
+    let store = workspace.read_with(cx, |workspace, _| workspace.store().clone());
+    store.read_with(cx, |store, _| {
+        assert!(store.hosts().is_empty());
+        assert_eq!(store.proxy_profiles(), &[proxy]);
+    });
+}
+
+#[gpui_kit::test]
+async fn a_temporary_connection_saves_a_new_proxys_password_before_connecting(
+    cx: &mut TestAppContext,
+) {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().join("shellrs.db");
+    let keychain = Arc::new(InMemorySecretStore::default());
+    let store = HostStore::load(HostDatabase::open(&path).unwrap())
+        .unwrap()
+        .with_secrets(keychain.clone());
+    let remote = Arc::new(RecordingRemoteProvider::default());
+    let (handle, workspace) = open_workspace_with_credentials(
+        cx,
+        store,
+        remote.clone(),
+        Arc::new(FakeConnectionTester::default()),
+    );
+
+    in_frame(cx, handle, |window, cx| {
+        window.click("temporary-connection", cx)
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.click("host-address", cx);
+        window.input("target.test", cx);
+        window.within("host-auth-source").click(2usize, cx);
+        window.within("host-route").click(1usize, cx);
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.click("host-proxy-host", cx);
+        window.input("proxy.test", cx);
+        window.click("host-proxy-port", cx);
+        window.input("8080", cx);
+        window.click("host-proxy-user", cx);
+        window.input("me", cx);
+        window.click("host-proxy-password", cx);
+        window.input("secret", cx);
+        window.click("commit", cx);
+    });
+    cx.wait_for(handle.into(), Duration::from_secs(3), |window, cx| {
+        window.render_frame(cx);
+        window.find("status-connection").label() == Some("已连接 target.test")
+    })
+    .await;
+    let proxy = ProxySettings::new(ProxyKind::Http, "proxy.test", 8080).with_user("me");
+    assert_eq!(remote.logins()[0].route, LoginRoute::Proxy((&proxy).into()));
+    assert_eq!(
+        keychain
+            .get(&SecretRef::proxy("me", "proxy.test", 8080))
+            .unwrap()
+            .as_deref()
+            .map(String::as_str),
+        Some("secret")
+    );
+    let store = workspace.read_with(cx, |workspace, _| workspace.store().clone());
+    store.read_with(cx, |store, _| {
+        assert_eq!(store.proxy_profiles(), std::slice::from_ref(&proxy))
+    });
+    assert_eq!(
+        HostDatabase::open(&path)
+            .unwrap()
+            .load()
+            .unwrap()
+            .proxy_profiles,
+        [proxy]
+    );
 }
 
 #[gpui_kit::test]

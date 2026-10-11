@@ -16,7 +16,8 @@ use super::{
     AuthKind, BookmarkSide, ConnectionState, Credential, CredentialDraft, CredentialId,
     CredentialKind, ForwardDraft, ForwardId, ForwardRule, GroupDraft, GroupId, Host, HostDatabase,
     HostDraft, HostGroup, HostId, HostLogin, HostNode, HostOs, JumpLogin, LoginRoute, NodeDrop,
-    ProxyLogin, PublicId, Route, Snippet, SnippetCategory, SnippetScope, SshLink, StoredData,
+    ProxyLogin, ProxySettings, PublicId, Route, Snippet, SnippetCategory, SnippetScope, SshLink,
+    StoredData,
 };
 
 mod inventory;
@@ -60,6 +61,8 @@ pub struct HostStore {
     pending_secrets: usize,
     groups: Vec<HostGroup>,
     hosts: Vec<Host>,
+    /// 与主机独立保存的常用代理，密码仍由系统钥匙串保存。
+    proxy_profiles: Vec<ProxySettings>,
     /// Hosts connected to without saving them: not listed. Their ids come
     /// from `next_host_id` like a saved host's, so they never meet.
     temporary: Vec<Host>,
@@ -106,6 +109,7 @@ const MAX_RECENT: usize = 10;
 #[derive(Clone, Copy, Debug)]
 enum Change {
     NewHost,
+    SaveProxyProfile,
     SaveHost,
     DeleteHost,
     DuplicateHost,
@@ -140,6 +144,7 @@ impl Change {
     fn not_saved(self, error: &rusqlite::Error) -> SharedString {
         match self {
             Change::NewHost => t!("host.store.not_saved.new_host", error = error),
+            Change::SaveProxyProfile => t!("host.store.not_saved.proxy_profile", error = error),
             Change::SaveHost => t!("host.store.not_saved.save_host", error = error),
             Change::DeleteHost => t!("host.store.not_saved.delete_host", error = error),
             Change::DuplicateHost => t!("host.store.not_saved.duplicate_host", error = error),
@@ -241,6 +246,7 @@ impl HostStore {
             pending_secrets: 0,
             groups: Vec::new(),
             hosts: Vec::new(),
+            proxy_profiles: Vec::new(),
             temporary: Vec::new(),
             external: HashSet::new(),
             next_host_id: 1,
@@ -283,6 +289,7 @@ impl HostStore {
         let StoredData {
             groups,
             mut hosts,
+            proxy_profiles,
             mut recent,
             bookmarks: stored_bookmarks,
             forwards,
@@ -323,6 +330,7 @@ impl HostStore {
             snippet_categories,
             groups,
             hosts,
+            proxy_profiles,
             temporary: Vec::new(),
             external: HashSet::new(),
             active: None,
@@ -414,6 +422,29 @@ impl HostStore {
         &self.hosts
     }
 
+    /// 新建主机和临时连接可套用的代理配置。
+    pub fn proxy_profiles(&self) -> &[ProxySettings] {
+        &self.proxy_profiles
+    }
+
+    /// 第一次使用时记下代理；重复使用不产生多余数据库写入。
+    pub fn remember_proxy(&mut self, proxy: ProxySettings, cx: &mut Context<Self>) {
+        if self.remember_proxy_unnotified(proxy.clone()) {
+            self.persist(Change::SaveProxyProfile, cx, |db| {
+                db.save_proxy_profile(&proxy)
+            });
+            cx.notify();
+        }
+    }
+
+    pub fn remember_proxy_unnotified(&mut self, proxy: ProxySettings) -> bool {
+        if self.proxy_profiles.contains(&proxy) {
+            return false;
+        }
+        self.proxy_profiles.push(proxy);
+        true
+    }
+
     /// A saved host, or a temporary one.
     pub fn host(&self, id: HostId) -> Option<&Host> {
         self.saved_host(id)
@@ -465,10 +496,8 @@ impl HostStore {
         id
     }
 
-    /// Connect to `draft` without saving it (临时连接): a temporary host the
-    /// tabs find by id, kept in memory until [`Self::remove_temporary`], with
-    /// `password` in memory too. It may log in with a saved credential; its
-    /// group, route and notes are not looked at, it goes directly.
+    /// 按 `draft` 建立临时连接，主机和登录密码只留在内存中，最后一个标签关闭后移除。
+    /// 可使用已保存的凭据或代理；分组与备注不参与临时连接。
     pub fn insert_temporary(
         &mut self,
         draft: HostDraft,
@@ -487,7 +516,9 @@ impl HostStore {
     ) -> HostId {
         let mut draft = normalized(&self.credentials, draft);
         draft.group = None;
-        draft.route = Route::Direct;
+        if !matches!(draft.route, Route::Proxy(_)) {
+            draft.route = Route::Direct;
+        }
         let id = HostId(self.next_host_id);
         self.next_host_id += 1;
         let mut host = Host::new(id, draft);
@@ -1665,8 +1696,7 @@ impl HostStore {
         passwords
     }
 
-    /// Forget the endpoint and proxy passwords `login` used, those that no
-    /// host uses any more.
+    /// 清理 `login` 用过的端点密码；代理密码有主机或常用代理引用时保留。
     fn forget_passwords_of(&mut self, login: &HostLogin, cx: &mut Context<Self>) {
         self.forget_password(login.password.clone(), cx);
         if let Some(proxy) = login.route.proxy_password() {
@@ -1674,9 +1704,7 @@ impl HostStore {
         }
     }
 
-    /// Delete an endpoint's or a proxy's saved password once no host logs
-    /// in with it. A credential's password is left alone: it goes with the
-    /// credential, not with the hosts using it.
+    /// 没有主机或常用代理再使用时才删端点或代理密码；凭据密码由凭据自己管理。
     fn forget_password(&mut self, secret: SecretRef, cx: &mut Context<Self>) {
         if matches!(secret, SecretRef::Password { .. } | SecretRef::Proxy { .. })
             && !self.password_in_use(&secret)
@@ -1685,10 +1713,15 @@ impl HostStore {
         }
     }
 
-    /// Whether any host still logs in with this password entry, or goes
-    /// through a proxy with it. Entries are shared, so one may only be
-    /// cleaned up once the last host using it is gone.
+    /// 共享密码只在没有主机和常用代理引用后才可清理。
     fn password_in_use(&self, secret: &SecretRef) -> bool {
+        if self
+            .proxy_profiles
+            .iter()
+            .any(|proxy| proxy.password_secret().as_ref() == Some(secret))
+        {
+            return true;
+        }
         self.hosts.iter().any(|host| {
             let login = self.login_of(host);
             login.password == *secret || login.route.proxy_password().as_ref() == Some(secret)
@@ -2552,6 +2585,31 @@ mod tests {
         store.update(cx, |store, cx| store.remove(two, cx));
         cx.run_until_parked();
         assert!(secrets.get(&secret).unwrap().is_none());
+    }
+
+    #[gpui_kit::test]
+    fn a_saved_proxy_keeps_its_password_after_the_last_host_is_removed(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        use crate::secrets::SecretStore as _;
+        use gpui_kit::AppContext as _;
+
+        let secrets = Arc::new(crate::secrets::InMemorySecretStore::default());
+        let mut store = HostStore::empty().with_secrets(secrets.clone());
+        let proxy = ProxySettings::new(ProxyKind::Http, "proxy.test", 8080).with_user("me");
+        let id =
+            store.insert_unnotified(draft("one", None).with_route(Route::Proxy(proxy.clone())));
+        store.remember_proxy_unnotified(proxy);
+        let secret = SecretRef::proxy("me", "proxy.test", 8080);
+        secrets.set(&secret, "hunter2").unwrap();
+        let store = cx.new(|_| store);
+
+        store.update(cx, |store, cx| store.remove(id, cx));
+        cx.run_until_parked();
+        assert_eq!(
+            secrets.get(&secret).unwrap().as_deref().map(String::as_str),
+            Some("hunter2")
+        );
     }
 
     #[test]
