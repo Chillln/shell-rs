@@ -68,32 +68,32 @@ jobs:
         shell: bash
         run: |
           cargo build --release --locked --bins
-      - name: Installer
+      - name: Install Inno Setup 7
         shell: pwsh
         run: |
-          $iscc = Get-Command iscc -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
-          if (-not $iscc) {
-            $candidates = @(
-              "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
-              "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
-              "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
-              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-            )
-            foreach ($path in $candidates) {
-              if (Test-Path $path) { $iscc = $path; break }
-            }
+          $url = "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe"
+          $out = "$env:TEMP\innosetup-7.1.0-x64.exe"
+          Write-Host "Downloading Inno Setup 7.1.0 from $url ..."
+          try {
+            Invoke-WebRequest -Uri $url -OutFile $out -TimeoutSec 60
+            Write-Host "Installing Inno Setup 7.1.0 silently..."
+            Start-Process -FilePath $out -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+          } catch {
+            Write-Warning "Direct download failed: $_"
           }
-          if (-not $iscc) {
+      - name: Build Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles}\Inno Setup 7\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
             choco install innosetup -y
-            $candidates = @(
-              "${env:ProgramFiles}\Inno Setup 7\ISCC.exe",
-              "${env:ProgramFiles(x86)}\Inno Setup 7\ISCC.exe",
-              "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
-              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-            )
-            foreach ($path in $candidates) {
-              if (Test-Path $path) { $iscc = $path; break }
-            }
+            $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           }
           Write-Host "Using Inno Setup compiler: $iscc"
           & $iscc "/DAppVersion=$env:VERSION" "/DBuildDir=$env:GITHUB_WORKSPACE\target\release" `
