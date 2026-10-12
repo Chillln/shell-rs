@@ -33,7 +33,7 @@ use super::notices::{NoticeScanner, ProgramNotice, TerminalNotice};
 use super::run::{BusyReason, RunFailure, RunHandle};
 use super::search::{MatchMarker, SearchDirection, SearchMark, SearchPosition, TerminalSearch};
 use super::{
-    ExecRequest, ExecResult, SharedTerminalTransportFactory, TerminalColors, TerminalLifecycle,
+    ExecReply, ExecRequest, SharedTerminalTransportFactory, TerminalColors, TerminalLifecycle,
     TerminalSize, TerminalStatus, TerminalTransportCommand, TerminalTransportEvent,
 };
 
@@ -493,11 +493,16 @@ impl TerminalEngine {
     /// Run `command` beside the shell, on the terminal's own connection; see
     /// [`ExecRequest`]. `None` while the shell is not running, and so there
     /// is no connection to run it on.
-    pub fn exec(&self, command: String) -> Option<mpsc::Receiver<ExecResult>> {
+    pub fn exec(&self, command: String) -> Option<ExecReply> {
+        self.exec_with_timeout(command, super::DEFAULT_EXEC_TIMEOUT)
+    }
+
+    /// 日志等慢速读取可单独指定期限，普通工具命令保持默认期限。
+    pub fn exec_with_timeout(&self, command: String, timeout: Duration) -> Option<ExecReply> {
         if !matches!(self.lifecycle, TerminalLifecycle::Running) {
             return None;
         }
-        self.runtime.exec(command)
+        self.runtime.exec(command, timeout)
     }
 
     /// Take up an `exec --terminal` run (see [`super::TerminalRun`]): ^C to
@@ -850,13 +855,12 @@ impl TerminalRuntime {
         let _ = self.commands.send(TerminalTransportCommand::Shutdown);
     }
 
-    fn exec(&self, command: String) -> Option<mpsc::Receiver<ExecResult>> {
-        let (reply, receiver) = mpsc::channel();
+    fn exec(&self, command: String, timeout: Duration) -> Option<ExecReply> {
+        let (request, receiver) = ExecRequest::new(command);
         self.commands
-            .send(TerminalTransportCommand::Exec(ExecRequest {
-                command,
-                reply,
-            }))
+            .send(TerminalTransportCommand::Exec(
+                request.with_timeout(timeout),
+            ))
             .ok()?;
         Some(receiver)
     }

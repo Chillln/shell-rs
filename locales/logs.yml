@@ -28,5 +28,5 @@ logs.empty:
   zh-CN: 没有匹配的日志
   en: No matching logs
 logs.interval:
-  zh-CN: 每 2 秒刷新最近 200 行；关闭日志页后停止刷新。
-  en: Refreshes the latest 200 lines every 2 seconds while this log view is visible.
+  zh-CN: 每 2 秒刷新最近 200 行，最多保留末尾 1 MiB；关闭日志页后停止刷新。
+  en: Refreshes the latest 200 lines every 2 seconds, keeping at most the last 1 MiB while visible.

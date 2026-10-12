@@ -47,9 +47,10 @@ pub use terminal_view::{
     TERMINAL_FIND_KEY_CONTEXT, TERMINAL_KEY_CONTEXT, TerminalMenuItems, TerminalView,
 };
 pub use theme::{TerminalColors, TerminalTheme};
-pub(crate) use transport::send_event;
+pub(crate) use transport::{DEFAULT_EXEC_TIMEOUT, send_event};
 pub use transport::{
-    ExecRequest, ExecResult, FixedRemoteTerminalTransportProvider, RemoteTerminalTransportProvider,
-    SharedRemoteTerminalTransportProvider, SharedTerminalTransportFactory, TerminalTransport,
-    TerminalTransportCommand, TerminalTransportEvent, TerminalTransportFactory,
+    ExecReply, ExecRequest, ExecResult, FixedRemoteTerminalTransportProvider,
+    RemoteTerminalTransportProvider, SharedRemoteTerminalTransportProvider,
+    SharedTerminalTransportFactory, TerminalTransport, TerminalTransportCommand,
+    TerminalTransportEvent, TerminalTransportFactory,
 };

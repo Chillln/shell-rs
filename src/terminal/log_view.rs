@@ -18,6 +18,7 @@ use crate::i18n::{UiLocale, t};
 use crate::shared::{Segment, SegmentedControl};
 
 const REFRESH_INTERVAL: Duration = Duration::from_secs(2);
+const LOG_TIMEOUT: Duration = Duration::from_secs(60);
 const RANGES: [u64; 4] = [0, 900, 3600, 86400];
 
 /// 日志工具栏的命令，统一由工作区处理。
@@ -143,7 +144,10 @@ impl LogView {
             loop {
                 let reply = this.update(cx, |this, cx| {
                     let command = (this.command)(RANGES[this.range])?;
-                    this.terminal.upgrade()?.read(cx).exec(command, cx)
+                    this.terminal
+                        .upgrade()?
+                        .read(cx)
+                        .exec_with_timeout(command, LOG_TIMEOUT, cx)
                 });
                 let answer = match reply {
                     Ok(Some(reply)) => exec_answer(reply, cx).await,

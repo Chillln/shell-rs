@@ -1,4 +1,9 @@
-use std::sync::{Arc, mpsc};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
+use std::time::Duration;
 
 use anyhow::Result;
 use async_channel::Sender;
@@ -25,6 +30,8 @@ pub enum TerminalTransportCommand {
 /// What a command run beside the shell printed, or why it did not run.
 pub type ExecResult = Result<String, String>;
 
+pub(crate) const DEFAULT_EXEC_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// A command to run beside the shell, on the terminal's own SSH connection:
 /// how the right sidebar's tools read the host, with no login of their own.
 /// The command gets no terminal and no input.
@@ -33,8 +40,73 @@ pub type ExecResult = Result<String, String>;
 /// why it could not run. A transport without a connection (a local PTY)
 /// drops the request, which the asker sees as the reply channel closing.
 pub struct ExecRequest {
-    pub command: String,
-    pub reply: mpsc::Sender<ExecResult>,
+    command: String,
+    reply: mpsc::Sender<ExecResult>,
+    timeout: Duration,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl ExecRequest {
+    pub fn new(command: impl Into<String>) -> (Self, ExecReply) {
+        let (reply, receiver) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        (
+            Self {
+                command: command.into(),
+                reply,
+                timeout: DEFAULT_EXEC_TIMEOUT,
+                cancelled: cancelled.clone(),
+            },
+            ExecReply {
+                receiver,
+                cancelled,
+            },
+        )
+    }
+
+    pub fn with_timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    pub fn command(&self) -> &str {
+        &self.command
+    }
+    pub fn timeout(&self) -> Duration {
+        self.timeout
+    }
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
+    pub fn answer(self, result: ExecResult) {
+        let _ = self.reply.send(result);
+    }
+}
+
+/// 回复的所有者离开后取消对应请求，避免隐藏日志页仍占用工具命令队列。
+pub struct ExecReply {
+    receiver: mpsc::Receiver<ExecResult>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl ExecReply {
+    pub(crate) fn try_recv(&self) -> Result<ExecResult, mpsc::TryRecvError> {
+        self.receiver.try_recv()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn recv_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<ExecResult, mpsc::RecvTimeoutError> {
+        self.receiver.recv_timeout(timeout)
+    }
+}
+
+impl Drop for ExecReply {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Release);
+    }
 }
 
 impl std::fmt::Debug for TerminalTransportCommand {

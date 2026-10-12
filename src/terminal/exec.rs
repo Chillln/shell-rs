@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use gpui_kit::*;
 
-use super::{ExecResult, RemoteTerminalId, TerminalView};
+use super::{ExecReply, ExecResult, RemoteTerminalId, TerminalView};
 
 /// How often an answer on its way is looked for. It comes from the
 /// terminal's transport thread, which must not wake the UI itself.
@@ -21,10 +21,7 @@ pub struct ExecTarget {
 
 /// Look for a command's answer until it comes. `None` when the transport
 /// drops the request instead: the terminal went away.
-pub async fn exec_answer(
-    reply: mpsc::Receiver<ExecResult>,
-    cx: &mut AsyncApp,
-) -> Option<ExecResult> {
+pub async fn exec_answer(reply: ExecReply, cx: &mut AsyncApp) -> Option<ExecResult> {
     loop {
         match reply.try_recv() {
             Ok(result) => return Some(result),

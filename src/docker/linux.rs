@@ -104,7 +104,8 @@ pub fn inspect_command(object: DockerObject, id: &str) -> Option<String> {
 pub fn logs_command(id: &str) -> Option<String> {
     let id = quoted(&[id.to_owned()])?;
     Some(format!(
-        "sh -c '{DOCKER}$d logs --tail 200 --timestamps {id} 2>&1'"
+        // 在服务器截取末尾一兆字节，避免超长日志行占满 SSH 通道。
+        "sh -c '{DOCKER}$d logs --tail 200 --timestamps {id} 2>&1 | tail -c 1048576'"
     ))
 }
 
@@ -1068,6 +1069,28 @@ v2.25.0
         assert!(terminal_command("aaa; rm -rf /").is_none());
         assert!(terminal_command("\"quoted\"").is_none());
         assert!(terminal_command("").is_none());
+    }
+
+    #[test]
+    fn oversized_logs_keep_the_newest_bytes_on_the_server() {
+        let command = logs_command("aaa111").unwrap();
+        // 替换 Docker 进程，实际运行同一条截取管线并产生超长日志行。
+        let command = command.replace(DOCKER,
+            "docker() { head -c 2097152 /dev/zero | tr \"\\000\" x; printf \"\\nlatest\\n\"; }; d=docker; ");
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        assert_eq!(output.stdout.len(), 1 << 20);
+        assert!(output.stdout.ends_with(b"\nlatest\n"));
+        assert!(
+            logs_command_in_range("aaa111", 900)
+                .unwrap()
+                .contains("--since 900s")
+        );
+        assert!(logs_command("aaa; bad").is_none());
     }
 
     #[cfg(unix)]

@@ -188,7 +188,7 @@ impl TerminalTransport for FakeTerminalTransport {
                     self.exec_commands
                         .lock()
                         .unwrap_or_else(|error| error.into_inner())
-                        .push(request.command.clone());
+                        .push(request.command().to_owned());
                     let mut outputs = self
                         .exec_outputs
                         .lock()
@@ -199,7 +199,7 @@ impl TerminalTransport for FakeTerminalTransport {
                         outputs.front().cloned()
                     };
                     if let Some(output) = output {
-                        let _ = request.reply.send(Ok(output));
+                        request.answer(Ok(output));
                     }
                 }
                 TerminalTransportCommand::PromptReply { .. } => {}

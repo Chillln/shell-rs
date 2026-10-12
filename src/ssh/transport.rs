@@ -32,9 +32,6 @@ use std::{
 use tokio::sync::{mpsc as tokio_mpsc, watch};
 use tokio::time::MissedTickBehavior;
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
-/// How long a command run beside the shell may take. Generous: a slow disk
-/// can hold `df` up for seconds.
-const EXEC_TIMEOUT: Duration = Duration::from_secs(10);
 /// The most output kept from a command run beside the shell; the rest is
 /// dropped.
 const EXEC_OUTPUT_LIMIT: usize = 1 << 20;
@@ -220,10 +217,13 @@ impl SshTerminalTransport {
         let mut exit_code = 0;
         let mut exit_signal = None;
         loop {
-            if exec.is_none()
+            while exec.is_none()
                 && let Some(request) = exec_queue.pop_front()
             {
-                exec = Some(Box::pin(run_exec(&handle, request)));
+                // 已关闭或切换的工具页不再占用服务器的命令通道。
+                if !request.is_cancelled() {
+                    exec = Some(Box::pin(run_exec(&handle, request)));
+                }
             }
             tokio::select! {
                 command = io_rx.recv() => match command {
@@ -253,7 +253,7 @@ impl SshTerminalTransport {
                     Some(TerminalTransportCommand::Exec(request)) if shell_only => {
                         // The answer for a terminal that carries nothing
                         // beside the shell.
-                        let _ = request.reply.send(Err(t!("ssh.terminal.shell_only").into()));
+                        request.answer(Err(t!("ssh.terminal.shell_only").into()));
                     }
                     Some(TerminalTransportCommand::Exec(request)) => exec_queue.push_back(request),
                     Some(TerminalTransportCommand::PromptReply { .. }) => {}
@@ -333,14 +333,22 @@ fn pixel_dimension(cells: usize, cell_size: u16) -> u32 {
 /// Run one command beside the shell and answer its request: what it printed
 /// on standard output, or why it did not run. Its standard error is dropped.
 async fn run_exec(handle: &SshHandle, request: ExecRequest) {
-    let ExecRequest { command, reply } = request;
-    let result = tokio::time::timeout(EXEC_TIMEOUT, async {
-        let mut channel = handle
-            .channel_open_session()
-            .await
-            .map_err(|_| t!("ssh.exec.channel_failed").to_string())?;
+    let mut channel = None;
+    let execution = tokio::time::timeout(request.timeout(), async {
+        channel = Some(
+            handle
+                .channel_open_session()
+                .await
+                .map_err(|_| t!("ssh.exec.channel_failed").to_string())?,
+        );
+        let channel = channel.as_mut().expect("exec channel opened");
         channel
-            .exec(true, command)
+            .exec(true, request.command())
+            .await
+            .map_err(|_| t!("ssh.exec.send_failed").to_string())?;
+        // 非交互读取没有输入，关闭标准输入，避免命令等待读入。
+        channel
+            .eof()
             .await
             .map_err(|_| t!("ssh.exec.send_failed").to_string())?;
         let mut output = Vec::new();
@@ -356,11 +364,24 @@ async fn run_exec(handle: &SshHandle, request: ExecRequest) {
             }
         }
         Ok(String::from_utf8_lossy(&output).into_owned())
-    })
-    .await
-    .unwrap_or_else(|_| Err(t!("ssh.exec.timeout").to_string()));
-    // The asker may have stopped waiting.
-    let _ = reply.send(result);
+    });
+    let result = tokio::select! {
+        result = execution => result.unwrap_or_else(|_| Err(t!("ssh.exec.timeout").to_string())),
+        _ = async {
+            while !request.is_cancelled() {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        } => return close_exec_channel(channel.as_mut()).await,
+    };
+    // 超时也显式关闭通道，避免远端日志读取留在后台运行。
+    close_exec_channel(channel.as_mut()).await;
+    request.answer(result);
+}
+
+async fn close_exec_channel(channel: Option<&mut russh::Channel<client::Msg>>) {
+    if let Some(channel) = channel {
+        let _ = tokio::time::timeout(SHUTDOWN_TIMEOUT, channel.close()).await;
+    }
 }
 
 /// Open a channel and run one probe command on it. Best effort throughout: a
@@ -611,6 +632,20 @@ mod tests {
                 .execs
                 .push(String::from_utf8_lossy(command).into_owned());
             session.channel_success(channel)?;
+            // 模拟日志准备较慢和服务器一直不结束读取的情况。
+            if command == b"delayed log" {
+                let handle = session.handle();
+                tokio::spawn(async move {
+                    tokio::time::sleep(Duration::from_millis(150)).await;
+                    let _ = handle.data(channel, b"log ready\n".to_vec()).await;
+                    let _ = handle.eof(channel).await;
+                    let _ = handle.close(channel).await;
+                });
+                return Ok(());
+            }
+            if command == b"stalled log" {
+                return Ok(());
+            }
             if command == CLI_COMMAND.as_bytes() {
                 session.data(channel, b"out".to_vec())?;
                 session.extended_data(channel, 1, b"err".to_vec())?;
@@ -827,6 +862,30 @@ mod tests {
         secrets: SharedSecretStore,
         wait_for_host_os: bool,
         execs: &[&str],
+        answer: impl FnMut(&ConnectionPromptKind) -> ConnectionPromptReply,
+    ) -> ConnectionReport {
+        connect_requests(
+            login,
+            known_hosts,
+            secrets,
+            wait_for_host_os,
+            execs
+                .iter()
+                .map(|command| {
+                    let (request, reply) = ExecRequest::new(command.to_string());
+                    (request, Some(reply))
+                })
+                .collect(),
+            answer,
+        )
+    }
+
+    fn connect_requests(
+        login: HostLogin,
+        known_hosts: &Path,
+        secrets: SharedSecretStore,
+        wait_for_host_os: bool,
+        execs: Vec<(ExecRequest, Option<crate::terminal::ExecReply>)>,
         mut answer: impl FnMut(&ConnectionPromptKind) -> ConnectionPromptReply,
     ) -> ConnectionReport {
         let mut report = ConnectionReport::default();
@@ -888,14 +947,10 @@ mod tests {
         }
         // All sent at once: the transport runs them one after another.
         let replies: Vec<_> = execs
-            .iter()
-            .map(|command| {
-                let (reply, receiver) = mpsc::channel();
+            .into_iter()
+            .filter_map(|(request, receiver)| {
                 command_tx
-                    .send(TerminalTransportCommand::Exec(ExecRequest {
-                        command: command.to_string(),
-                        reply,
-                    }))
+                    .send(TerminalTransportCommand::Exec(request))
                     .unwrap();
                 receiver
             })
@@ -903,7 +958,7 @@ mod tests {
         for receiver in replies {
             report.execs.push(
                 receiver
-                    .recv_timeout(EXEC_TIMEOUT)
+                    .recv_timeout(crate::terminal::DEFAULT_EXEC_TIMEOUT)
                     .expect("a command beside the shell was never answered"),
             );
         }
@@ -1788,6 +1843,74 @@ mod tests {
             .cloned()
             .collect();
         assert_eq!(execs, ["echo one", "echo two"]);
+    }
+
+    #[test]
+    fn slow_log_requests_use_their_deadline_and_cancelled_requests_do_not_block_the_queue() {
+        let Some(server) = start_server_replying(TestAuth::Password, tool_reply) else {
+            return;
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let (short, short_reply) = ExecRequest::new("delayed log");
+        let (long, long_reply) = ExecRequest::new("delayed log");
+        let (cancelled, cancelled_reply) = ExecRequest::new("stalled log");
+        drop(cancelled_reply);
+        let (active, active_reply) = ExecRequest::new("stalled log");
+        let state = server.state.clone();
+        let canceller = thread::spawn(move || {
+            let deadline = std::time::Instant::now() + Duration::from_secs(3);
+            while std::time::Instant::now() < deadline {
+                if state
+                    .lock()
+                    .unwrap()
+                    .execs
+                    .iter()
+                    .any(|command| command == "stalled log")
+                {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            drop(active_reply);
+        });
+        let (last, last_reply) = ExecRequest::new("echo two");
+        let report = connect_requests(
+            HostLogin::of(&password_host(server.port), None),
+            &directory.path().join("known_hosts"),
+            Arc::new(NoSecretStore),
+            false,
+            vec![
+                (
+                    short.with_timeout(Duration::from_millis(50)),
+                    Some(short_reply),
+                ),
+                (long.with_timeout(Duration::from_secs(2)), Some(long_reply)),
+                (cancelled, None),
+                (active.with_timeout(Duration::from_secs(60)), None),
+                (last, Some(last_reply)),
+            ],
+            trust_and_type_password,
+        );
+        assert_eq!(
+            report.execs,
+            [
+                Err(t!("ssh.exec.timeout").to_string()),
+                Ok("log ready\n".into()),
+                Ok("two\n".into())
+            ]
+        );
+        canceller.join().unwrap();
+        assert_eq!(
+            server
+                .state
+                .lock()
+                .unwrap()
+                .execs
+                .iter()
+                .filter(|command| *command == "stalled log")
+                .count(),
+            1
+        );
     }
 
     #[test]

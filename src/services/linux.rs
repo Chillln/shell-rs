@@ -143,7 +143,7 @@ pub fn log_command(name: &str) -> Option<String> {
         let journal = format!("journalctl -u \"{name}\" -n 200 --no-pager");
         format!(
             "sh -c 'export LC_ALL=C; if test \"$(id -u)\" = 0; then {journal}; \
-             else sudo -n {journal} 2>/dev/null || {journal}; fi 2>&1'"
+             else sudo -n {journal} 2>/dev/null || {journal}; fi 2>&1 | tail -c 1048576'"
         )
     })
 }

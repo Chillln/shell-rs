@@ -397,12 +397,18 @@ impl TerminalView {
 
     /// Run `command` beside the shell, on this terminal's own connection;
     /// see [`super::ExecRequest`]. `None` while the shell is not running.
-    pub fn exec(
+    pub fn exec(&self, command: String, cx: &App) -> Option<super::ExecReply> {
+        self.engine.read(cx).exec(command)
+    }
+
+    /// 对读取日志使用独立的等待期限。
+    pub fn exec_with_timeout(
         &self,
         command: String,
+        timeout: std::time::Duration,
         cx: &App,
-    ) -> Option<std::sync::mpsc::Receiver<super::ExecResult>> {
-        self.engine.read(cx).exec(command)
+    ) -> Option<super::ExecReply> {
+        self.engine.read(cx).exec_with_timeout(command, timeout)
     }
 
     /// Take up an `exec --terminal` run; see [`TerminalEngine::run_command`].
