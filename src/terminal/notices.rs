@@ -68,6 +68,8 @@ impl ProgramNotice {
 pub struct NoticeScanner {
     parser: Parser,
     found: Vec<ProgramNotice>,
+    directory: Option<Option<String>>,
+    directory_pending: Option<Option<String>>,
 }
 
 impl Default for NoticeScanner {
@@ -75,6 +77,8 @@ impl Default for NoticeScanner {
         Self {
             parser: Parser::new(),
             found: Vec::new(),
+            directory: None,
+            directory_pending: None,
         }
     }
 }
@@ -82,16 +86,49 @@ impl Default for NoticeScanner {
 impl NoticeScanner {
     /// The notifications that end in `bytes`.
     pub fn scan(&mut self, bytes: &[u8]) -> Vec<ProgramNotice> {
-        let mut found = Found(&mut self.found);
-        self.parser.advance(&mut found, bytes);
+        let mut rest = bytes;
+        while !rest.is_empty() {
+            // VTE 在 ESC 时已经派发 OSC；目录要等到完整的 ST 终止符才生效。
+            if let Some(path) = self.directory_pending.take() {
+                self.directory = Some(if rest[0] == b'\\' { path } else { None });
+            }
+            let end = rest
+                .iter()
+                .position(|byte| *byte == 0x1b)
+                .map_or(rest.len(), |at| at + 1);
+            let mut found = Found(
+                &mut self.found,
+                &mut self.directory,
+                &mut self.directory_pending,
+            );
+            self.parser.advance(&mut found, &rest[..end]);
+            rest = &rest[end..];
+        }
         std::mem::take(&mut self.found)
+    }
+
+    pub fn take_directory(&mut self) -> Option<Option<String>> {
+        self.directory.take()
     }
 }
 
-struct Found<'a>(&'a mut Vec<ProgramNotice>);
+struct Found<'a>(
+    &'a mut Vec<ProgramNotice>,
+    &'a mut Option<Option<String>>,
+    &'a mut Option<Option<String>>,
+);
 
 impl Perform for Found<'_> {
-    fn osc_dispatch(&mut self, params: &[&[u8]], _: bool) {
+    fn osc_dispatch(&mut self, params: &[&[u8]], bell_terminated: bool) {
+        if params.first() == Some(&&b"7"[..]) {
+            // 无效的新报告也清空旧目录，避免继续打开已经过期的路径。
+            let path = Some(super::directory::reported_directory(params));
+            if bell_terminated {
+                *self.1 = path;
+            } else {
+                *self.2 = path;
+            }
+        }
         if let Some(notice) = program_notice(params) {
             self.0.push(notice);
         }
@@ -218,5 +255,21 @@ mod tests {
                 body: "x".into()
             }
         );
+    }
+
+    #[test]
+    fn directory_reports_survive_chunking_and_invalid_reports_clear_the_old_path() {
+        let mut scanner = NoticeScanner::default();
+        scanner.scan(b"\x1b]7;file://server/srv/a%20");
+        assert_eq!(scanner.take_directory(), None);
+        scanner.scan(b"b;data\x1b");
+        assert_eq!(scanner.take_directory(), None);
+        scanner.scan(b"\\");
+        assert_eq!(scanner.take_directory(), Some(Some("/srv/a b;data".into())));
+        scanner.scan(b"\x1b]7;file://server/a%0Ab\x07");
+        assert_eq!(scanner.take_directory(), Some(None));
+        let oversized = format!("\x1b]7;file://server/{}\x07", "x".repeat(20000));
+        scanner.scan(oversized.as_bytes());
+        assert_eq!(scanner.take_directory(), Some(None));
     }
 }

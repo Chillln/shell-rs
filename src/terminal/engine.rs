@@ -92,6 +92,8 @@ pub struct TerminalEngine {
     runtime: TerminalRuntime,
     lifecycle: TerminalLifecycle,
     title: Option<String>,
+    /// 当前连接最后一次完整的目录报告，重连时清空。
+    directory: Option<String>,
     /// The connection's latest round trip, while one is running.
     latency: Option<Latency>,
     /// The open find, if any. Rendering reads it through `&self` and still
@@ -137,6 +139,7 @@ impl TerminalEngine {
             runtime,
             lifecycle: TerminalLifecycle::Starting,
             title: None,
+            directory: None,
             latency: None,
             search: RefCell::new(None),
             url_search: RefCell::new(url_search()),
@@ -199,6 +202,7 @@ impl TerminalEngine {
             }
             TerminalUiEventKind::Title(title) => self.title = sanitize_title(&title),
             TerminalUiEventKind::ResetTitle => self.title = None,
+            TerminalUiEventKind::Directory(path) => self.directory = path,
             TerminalUiEventKind::Exited { code, signal } => {
                 self.lifecycle = TerminalLifecycle::Exited { code, signal };
                 self.latency = None;
@@ -244,6 +248,7 @@ impl TerminalEngine {
         self.runtime.shutdown();
         self.lifecycle = TerminalLifecycle::Starting;
         self.title = None;
+        self.directory = None;
         self.latency = None;
         // The new emulator starts empty; matches in the old one mean nothing.
         self.search.replace(None);
@@ -264,6 +269,12 @@ impl TerminalEngine {
     ) {
         self.factory = factory;
         self.restart(cx);
+    }
+
+    pub fn current_directory(&self) -> Option<&str> {
+        matches!(self.lifecycle, TerminalLifecycle::Running)
+            .then_some(self.directory.as_deref())
+            .flatten()
     }
 
     pub fn reply_to_prompt(&self, request_id: u64, reply: ConnectionPromptReply) {
@@ -774,6 +785,9 @@ impl TerminalRuntime {
                             for notice in notices.scan(&bytes) {
                                 parser_proxy.send(TerminalUiEventKind::Notice(notice));
                             }
+                            if let Some(path) = notices.take_directory() {
+                                parser_proxy.send(TerminalUiEventKind::Directory(path));
+                            }
                             feed_run(&parser_run, &bytes);
                             parser_proxy.wakeup();
                         }
@@ -971,6 +985,7 @@ enum TerminalUiEventKind {
     Wakeup,
     Title(String),
     ResetTitle,
+    Directory(Option<String>),
     Exited {
         code: u32,
         signal: Option<String>,

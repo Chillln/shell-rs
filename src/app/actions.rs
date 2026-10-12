@@ -221,6 +221,10 @@ id_actions! {
     CloseTerminal(RemoteTerminalId);
     /// Reconnect one remote terminal using the host's latest settings.
     ReconnectTerminal(RemoteTerminalId);
+    /// 在 SFTP 中打开指定终端报告的工作目录。
+    OpenTerminalDirectory(RemoteTerminalId);
+    /// 从指定 SFTP 标签的远端目录打开独立终端。
+    OpenTerminalHere(ExplorerId);
     /// Disconnect one remote terminal, keeping its tab to reconnect from.
     DisconnectTerminal(RemoteTerminalId);
     /// Open the dialog that gives one remote terminal tab its own title.

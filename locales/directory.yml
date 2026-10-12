@@ -1,0 +1,17 @@
+_version: 2
+
+directory.to_sftp:
+  zh-CN: 在 SFTP 中打开终端目录
+  en: Open terminal directory in SFTP
+directory.from_sftp:
+  zh-CN: 在此目录打开终端
+  en: Open terminal here
+directory.no_report:
+  zh-CN: 终端尚未报告工作目录，请先配置 shell 的目录报告。
+  en: The terminal has not reported its directory. Configure directory reporting in your shell first.
+directory.unsupported:
+  zh-CN: 无法在此目录打开终端。需要支持 POSIX shell，且路径不能包含控制字符。
+  en: Cannot open a terminal here. A POSIX shell and a path without control characters are required.
+directory.connection_changed:
+  zh-CN: 主机连接配置已变更，请重新连接 SFTP 后再打开终端。
+  en: Host connection settings have changed. Reconnect SFTP before opening a terminal.

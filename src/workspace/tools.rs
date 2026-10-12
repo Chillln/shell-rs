@@ -325,7 +325,10 @@ impl Workspace {
         if let Some(id) = self.connect_host_with_command(host, Some(command), window, cx) {
             let title = t!("docker.terminal_title", name = container.name);
             if let Some(panel) = self.terminals.get(&id) {
-                panel.update(cx, |panel, cx| panel.set_custom_title(Some(title), cx));
+                panel.update(cx, |panel, cx| {
+                    panel.set_custom_title(Some(title), cx);
+                    panel.set_host_filesystem(false, cx);
+                });
             }
         }
     }

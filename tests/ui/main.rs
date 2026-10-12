@@ -10,6 +10,7 @@ mod support;
 mod cli;
 mod connection;
 mod credential;
+mod directories;
 mod docker;
 mod editor;
 mod forward;

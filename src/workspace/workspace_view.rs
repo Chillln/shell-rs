@@ -1159,10 +1159,8 @@ impl Workspace {
         host_id: HostId,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) {
-        if self.store.read(cx).host(host_id).is_none() {
-            return;
-        }
+    ) -> Option<ExplorerId> {
+        self.store.read(cx).host(host_id)?;
         // Every request opens a tab of its own, as connecting does for
         // terminals: two directories of one host side by side.
         let id = ExplorerId(self.next_explorer_id);
@@ -1176,6 +1174,7 @@ impl Workspace {
         self.dock_area.update(cx, |area, cx| {
             area.add_panel_view(panel_handle(panel), DockPlacement::Center, None, window, cx);
         });
+        Some(id)
     }
 
     fn on_new_local_terminal(
@@ -2556,6 +2555,8 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_reconnect_terminal))
             .on_action(cx.listener(Self::on_disconnect_terminal))
             .on_action(cx.listener(Self::on_open_explorer))
+            .on_action(cx.listener(Self::on_open_terminal_directory))
+            .on_action(cx.listener(Self::on_open_terminal_here))
             .on_action(cx.listener(Self::on_explorer_action))
             .on_action(cx.listener(Self::on_explorer_shortcut))
             .on_action(cx.listener(Self::on_close_terminal))

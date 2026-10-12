@@ -390,6 +390,10 @@ impl TerminalView {
         self.engine.read(cx).latency()
     }
 
+    pub fn current_directory(&self, cx: &App) -> Option<String> {
+        self.engine.read(cx).current_directory().map(str::to_owned)
+    }
+
     /// Which connection the terminal is on: counts up with every reconnect.
     pub fn generation(&self, cx: &App) -> u64 {
         self.engine.read(cx).generation()

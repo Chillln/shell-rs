@@ -14,7 +14,7 @@ use crate::app::ExplorerDispatch as _;
 use crate::{
     app::{
         CatalogIcon, ExplorerAction, ExplorerCommand, ExplorerShortcut, LOCAL_FILE_LIST_CONTEXT,
-        REMOTE_FILE_LIST_CONTEXT, ToggleHiddenFiles,
+        OpenTerminalHere, REMOTE_FILE_LIST_CONTEXT, ToggleHiddenFiles,
     },
     host::{BookmarkSide, ConnectionState, HostId, HostStore},
     i18n::{UiLocale, t, tn},
@@ -1113,6 +1113,24 @@ impl Render for FilePane {
                     )
                     .disabled(!navigable)
                     .dropdown_menu(move |popup, _, _| bookmark_menu(popup, &menu))
+            })
+            .when(remote, |bar| {
+                let dispatch = self.dispatch.clone();
+                bar.child(
+                    Button::new("terminal-here")
+                        .ghost()
+                        .small()
+                        .icon(CatalogIcon::Terminal)
+                        .accessibility_label(t!("directory.from_sftp"))
+                        .tooltip(t!("directory.from_sftp"))
+                        .disabled(!navigable)
+                        .on_click(move |_, window, cx| {
+                            let dispatch = dispatch.clone();
+                            window.defer(cx, move |window, cx| {
+                                dispatch.dispatch_action(&OpenTerminalHere(sid), window, cx)
+                            });
+                        }),
+                )
             })
             .child(Separator::vertical())
             .child(

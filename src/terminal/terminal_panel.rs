@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui_kit::component::{
-    Icon, IconName, Sizable as _,
+    Disableable as _, Icon, IconName, Sizable as _,
     button::Button,
     dock::{BasePanel, Panel, PanelEvent, TabGroup},
     menu::PopupMenu,
@@ -10,7 +10,7 @@ use gpui_kit::*;
 
 use crate::app::{
     CatalogIcon, CenterTab, CloseTerminal, ConnectHost, CopyHostAddress, DisconnectTerminal,
-    EditHost, OpenExplorer, ReconnectTerminal, RenameTerminal,
+    EditHost, OpenExplorer, OpenTerminalDirectory, ReconnectTerminal, RenameTerminal,
 };
 use crate::connection::{ConnectionPrompt, ConnectionPromptReply};
 use crate::host::{HostId, HostOs, HostStore};
@@ -46,6 +46,8 @@ pub struct TerminalPanel {
     custom_title: Option<SharedString>,
     /// 每次连接建立后执行一次；在断开期间保留启动意图。
     launch_command: Option<String>,
+    /// 容器使用独立文件系统，其目录不能直接作为主机的 SFTP 路径。
+    host_filesystem: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -127,6 +129,7 @@ impl TerminalPanel {
             tab_group: None,
             custom_title: None,
             launch_command: command,
+            host_filesystem: true,
             _subscriptions: subscriptions,
         }
     }
@@ -159,6 +162,13 @@ impl TerminalPanel {
 
     pub fn terminal(&self) -> &Entity<TerminalView> {
         &self.terminal
+    }
+    pub fn uses_host_filesystem(&self) -> bool {
+        self.host_filesystem
+    }
+    pub fn set_host_filesystem(&mut self, value: bool, cx: &mut Context<Self>) {
+        self.host_filesystem = value;
+        cx.notify();
     }
 
     pub fn lifecycle(&self, cx: &App) -> TerminalLifecycle {
@@ -274,10 +284,10 @@ impl Panel for TerminalPanel {
         Some(LatencyLabel::new(("terminal-latency", self.id.0), latency))
     }
 
-    fn toolbar_buttons(&mut self, _: &mut Window, _: &mut Context<Self>) -> Option<Vec<Button>> {
+    fn toolbar_buttons(&mut self, _: &mut Window, cx: &mut Context<Self>) -> Option<Vec<Button>> {
         let host_id = self.host_id;
         let terminal_id = self.id;
-        Some(vec![
+        let mut buttons = vec![
             Button::new(("sftp", terminal_id.0))
                 .icon(Icon::new(CatalogIcon::FolderTree))
                 .label("SFTP")
@@ -291,7 +301,25 @@ impl Panel for TerminalPanel {
                 .on_click(move |_, window, cx| {
                     window.dispatch_action(Box::new(ReconnectTerminal(terminal_id)), cx)
                 }),
-        ])
+        ];
+        if self.host_filesystem {
+            let known = self.terminal.read(cx).current_directory(cx).is_some();
+            buttons.push(
+                Button::new(("terminal-directory", terminal_id.0))
+                    .icon(CatalogIcon::FolderTree)
+                    .accessibility_label(t!("directory.to_sftp"))
+                    .tooltip(if known {
+                        t!("directory.to_sftp")
+                    } else {
+                        t!("directory.no_report")
+                    })
+                    .disabled(!known)
+                    .on_click(move |_, window, cx| {
+                        window.dispatch_action(Box::new(OpenTerminalDirectory(terminal_id)), cx)
+                    }),
+            );
+        }
+        Some(buttons)
     }
 
     fn dropdown_menu(

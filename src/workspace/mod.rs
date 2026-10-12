@@ -6,6 +6,7 @@ mod automatic_sync;
 mod cli_changes;
 mod cloud_sync;
 mod credentials;
+mod directories;
 mod dock_skin;
 mod editors;
 mod forwards;

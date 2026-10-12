@@ -25,7 +25,9 @@ impl Workspace {
                     .update(cx, |store, cx| store.insert_external(link, cx));
                 match kind {
                     LinkKind::Ssh => self.connect_host(host, window, cx),
-                    LinkKind::Sftp => self.open_explorer(host, window, cx),
+                    LinkKind::Sftp => {
+                        self.open_explorer(host, window, cx);
+                    }
                 }
                 // The tab is what the bastion host opened ShellRS for: the
                 // hosts make way, as with ⌘B, which brings them back.

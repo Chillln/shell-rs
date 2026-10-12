@@ -89,6 +89,8 @@ pub struct ExplorerPanel {
     /// A title the user gave this tab. Lives as long as the tab, like the
     /// rest of the layout.
     custom_title: Option<SharedString>,
+    /// 从终端打开时指定的目录，连接就绪后才开始加载。
+    pending_directory: Option<String>,
     /// The pane that held focus last, which takes it back on activation.
     last_remote: bool,
     /// Where the user put the divider between the panes, and the one above
@@ -232,6 +234,7 @@ impl ExplorerPanel {
             focus_handle: cx.focus_handle(),
             tab_group: None,
             custom_title: None,
+            pending_directory: None,
             last_remote: true,
             panes_split: cx.new(|_| ResizableState::default()),
             queue_split: cx.new(|_| ResizableState::default()),
@@ -464,7 +467,11 @@ impl ExplorerPanel {
                 self.state = ConnectionState::Connected;
                 self.remote
                     .update(cx, |pane, _| pane.set_home(home.to_string()));
-                self.reload(true, window, cx);
+                if let Some(path) = self.pending_directory.take() {
+                    self.navigate(true, path, LoadIntent::Visit, window, cx);
+                } else {
+                    self.reload(true, window, cx);
+                }
                 cx.emit(ExplorerPanelEvent::StateChanged(self.id, self.host_id));
             }
             SftpEvent::Disconnected(message) => {
@@ -583,6 +590,19 @@ impl ExplorerPanel {
             pane.update(cx, |pane, cx| {
                 pane.load_local(path, intent, self.local_provider.clone(), window, cx)
             });
+        }
+    }
+    /// 初始连接未完成时保存目录意图，不丢失用户从终端发起的导航。
+    pub fn open_directory_when_connected(
+        &mut self,
+        path: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.state == ConnectionState::Connected {
+            self.navigate(true, path, LoadIntent::Visit, window, cx);
+        } else {
+            self.pending_directory = Some(path);
         }
     }
     /// Re-read a pane's current directory, keeping its history.
