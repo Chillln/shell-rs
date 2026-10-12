@@ -85,7 +85,8 @@ impl PaneOperation {
                 paths: paths(names)?,
                 confirmation: confirmation.clone(),
             },
-            PaneOperation::ForceDelete { .. } => unreachable!("强制删除使用独立的 SSH 命令"),
+            // 强制删除已由独立的 SSH 命令处理，不进入普通 SFTP 操作。
+            PaneOperation::ForceDelete { .. } => unreachable!(),
             PaneOperation::Rename { from, to } => RemoteOperation::Rename {
                 from: directory.join(from)?,
                 to: directory.join(to)?,
@@ -123,7 +124,8 @@ impl PaneOperation {
         };
         match self {
             PaneOperation::Delete { names, .. } => provider.trash(&paths(names)),
-            PaneOperation::ForceDelete { .. } => unreachable!("强制删除只适用于远端"),
+            // 强制删除只接受远端目标，本地操作不会进入此分支。
+            PaneOperation::ForceDelete { .. } => unreachable!(),
             PaneOperation::Rename { from, to } => {
                 provider.rename(&directory.join(from), &directory.join(to))
             }
