@@ -21,7 +21,7 @@ mod terminal_view;
 mod theme;
 mod transport;
 
-pub use directory::directory_terminal_command;
+pub use directory::{directory_reporting_terminal_command, directory_terminal_command};
 pub use engine::{TerminalCell, TerminalEngine, TerminalEvent, TerminalSnapshot};
 pub use exec::{ExecTarget, exec_answer};
 pub use font::{

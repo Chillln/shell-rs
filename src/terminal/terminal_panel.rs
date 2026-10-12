@@ -308,16 +308,27 @@ impl Panel for TerminalPanel {
         ];
         if self.host_filesystem {
             let known = self.terminal.read(cx).current_directory(cx).is_some();
+            let store = self.store.read(cx);
+            let available = self.terminal.read(cx).lifecycle(cx) == TerminalLifecycle::Running
+                && !store.is_external(host_id)
+                && !store
+                    .host(host_id)
+                    .is_some_and(|host| host.os == Some(HostOs::Windows));
+            let label = if known {
+                t!("directory.to_sftp")
+            } else {
+                t!("directory.configure")
+            };
             buttons.push(
                 Button::new(("terminal-directory", terminal_id.0))
                     .icon(CatalogIcon::FolderTree)
-                    .accessibility_label(t!("directory.to_sftp"))
-                    .tooltip(if known {
-                        t!("directory.to_sftp")
+                    .accessibility_label(label.clone())
+                    .tooltip(if known || available {
+                        label
                     } else {
-                        t!("directory.no_report")
+                        t!("directory.reporting.unavailable")
                     })
-                    .disabled(!known)
+                    .disabled(!known && !available)
                     .on_click(move |_, window, cx| {
                         window.dispatch_action(Box::new(OpenTerminalDirectory(terminal_id)), cx)
                     }),

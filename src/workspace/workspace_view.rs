@@ -2573,6 +2573,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_disconnect_terminal))
             .on_action(cx.listener(Self::on_open_explorer))
             .on_action(cx.listener(Self::on_open_terminal_directory))
+            .on_action(cx.listener(Self::on_enable_directory_reporting))
             .on_action(cx.listener(Self::on_open_terminal_here))
             .on_action(cx.listener(Self::on_explorer_action))
             .on_action(cx.listener(Self::on_explorer_shortcut))

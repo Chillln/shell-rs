@@ -7,8 +7,29 @@ directory.from_sftp:
   zh-CN: 在此目录打开终端
   en: Open terminal here
 directory.no_report:
-  zh-CN: 终端尚未报告工作目录，请先配置 shell 的目录报告。
-  en: The terminal has not reported its directory. Configure directory reporting in your shell first.
+  zh-CN: 终端尚未报告工作目录。
+  en: The terminal has not reported its working directory.
+directory.configure:
+  zh-CN: 启用目录报告…
+  en: Enable directory reporting…
+directory.reporting.description:
+  zh-CN: 在同一台主机的新标签页打开带目录报告的 Bash 终端，即可从终端打开当前目录的 SFTP。配置只作用于新标签页，无需编辑远端配置文件。远端须安装 Bash。
+  en: Open a Bash terminal with directory reporting in a new tab on this host, then open its current directory in SFTP. The setup applies only to the new tab and requires no remote configuration edits. Bash must be installed on the host.
+directory.reporting.dialog_title:
+  zh-CN: 启用目录报告
+  en: Enable directory reporting
+directory.reporting.enable:
+  zh-CN: 新建并启用
+  en: Open and enable
+directory.reporting.unavailable:
+  zh-CN: 目录报告需要已连接的普通主机终端和支持 POSIX shell 的系统。
+  en: Directory reporting requires a connected host terminal on a system with a POSIX shell.
+directory.reporting.bash_missing:
+  zh-CN: 无法启用目录报告：远端未安装 Bash。请安装 Bash 或按照使用说明为当前 shell 配置 OSC 7。
+  en: Cannot enable directory reporting because Bash is not installed. Install Bash or follow the manual to configure OSC 7 in your shell.
+directory.reporting.title:
+  zh-CN: "%{host} · 目录联动"
+  en: "%{host} · Directory linking"
 directory.unsupported:
   zh-CN: 无法在此目录打开终端。需要支持 POSIX shell，且路径不能包含控制字符。
   en: Cannot open a terminal here. A POSIX shell and a path without control characters are required.

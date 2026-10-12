@@ -6,6 +6,8 @@ ShellRS 的命令预测直接读取远端历史文件，去重后按最近使用
 
 目录联动另外使用 OSC 7 获取工作目录。自定义提示符无法自动识别时，可以同时添加 OSC 133 的提示符边界。
 
+无需编辑远端文件也可以启用：点击终端标签工具栏的「启用目录报告…」，再点「新建并启用」。ShellRS 会在同一主机的新标签页打开 Bash，通过 SSH exec 和匿名管道加载报告钩子，保留用户的 Bash 登录环境与交互配置。配置只作用于新标签页，关闭后失效；重新连接该标签页会再次启用。远端需要安装 Bash。
+
 如果 shell 已经提供 OSC 7 / OSC 133 集成，无需重复配置。需要目录联动或使用自定义提示符的 Bash，可以把下面这段放到远端 `~/.bashrc` 的末尾，然后执行 `source ~/.bashrc` 或重新连接。它保留已有的 `PROMPT_COMMAND`，不会修改历史保存规则。
 
 ```bash
@@ -21,7 +23,11 @@ __shellrs_prompt() {
     printf '\033]7;file://localhost%s\007\033]133;A\007' "$encoded"
 }
 if [[ ${PROMPT_COMMAND[*]} != *__shellrs_prompt* ]]; then
-    PROMPT_COMMAND=("${PROMPT_COMMAND[@]}" __shellrs_prompt)
+    if ((BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1))); then
+        PROMPT_COMMAND=("${PROMPT_COMMAND[@]}" __shellrs_prompt)
+    else
+        PROMPT_COMMAND="${PROMPT_COMMAND:+$PROMPT_COMMAND$'\n'}__shellrs_prompt"
+    fi
 fi
 if [[ $PS1 != *'\[\e]133;B\a\]'* ]]; then
     PS1+='\[\e]133;B\a\]'
