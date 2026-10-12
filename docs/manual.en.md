@@ -40,6 +40,8 @@ Hover over a host and `user@address:port` appears at the right of its row, with 
 
 The search box above the host list (⌘K, or Ctrl+K on Windows and Linux) filters hosts by name, address and username, and finds groups by name: when a group’s name matches, the group is listed with all its subgroups and hosts. Results are expanded, and matching hosts appear together with every level of group above them. Enter connects to the first matching host (in list order; hosts listed only because their group matched don’t count). Esc clears the search.
 
+The title bar’s search icon or Ctrl+Shift+P (⌘⇧P on macOS) opens “Quick switch” to search open terminal, SFTP, editor and settings tabs, saved hosts, and common commands. Hosts can be found by name, address, username or full group path. Select with ↑↓ and open with Enter, or click a result. Selecting a connected host reuses a running terminal; otherwise a new connection opens. Esc clears the search first, then closes the palette and restores focus. Its shortcut can be changed in Settings → Keyboard shortcuts.
+
 Drag a group or host above or below another item of the same kind to reorder items at the same level; drag a host onto a group to move it into the group, and drag a group onto the middle of another group to make it a subgroup. Drag to an empty part of the list to move an item back to the top level. Groups always come before hosts at the same level, and the order and which groups are expanded are saved in the local database. Reordering by dragging is paused while you search.
 
 ## Quick connect

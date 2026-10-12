@@ -27,6 +27,10 @@ gpui_kit::actions!(
         /// Open 快速连接: search the saved hosts and connect to one or
         /// several.
         QuickConnect,
+        /// 搜索主机、已打开的标签和常用命令。
+        ShowQuickSwitcher,
+        /// 关闭快速切换面板并恢复焦点。
+        CloseQuickSwitcher,
         /// Open the new-group dialog for a top-level group.
         NewGroup,
         /// Open a new local login-shell terminal.
@@ -418,6 +422,34 @@ pub enum CenterTab {
     /// There is at most one settings tab.
     Settings,
     Editor(EditorId),
+}
+
+/// 快速切换中的目标，使用领域身份而非过滤后的列表序号。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuickTarget {
+    Tab(CenterTab),
+    Host(HostId),
+    NewHost,
+    LocalTerminal,
+    TemporaryConnection,
+    Settings,
+    Credentials,
+    Forwards,
+}
+
+#[derive(Action, Clone, PartialEq, Eq)]
+#[action(namespace = shellrs, no_json)]
+pub struct ChooseQuickTarget {
+    target: QuickTarget,
+}
+
+impl ChooseQuickTarget {
+    pub fn new(target: QuickTarget) -> Self {
+        Self { target }
+    }
+    pub fn target(&self) -> QuickTarget {
+        self.target
+    }
 }
 
 /// A tool of the right sidebar, in the order of the switch beside it.

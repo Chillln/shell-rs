@@ -8,7 +8,7 @@ use gpui_kit::*;
 
 use crate::app::{
     CatalogIcon, NewLocalTerminal, NewTemporaryConnection, ShowCredentials, ShowForwards,
-    ShowHosts, ToggleHostPanel, ToggleTheme,
+    ShowHosts, ShowQuickSwitcher, ToggleHostPanel, ToggleTheme,
 };
 use crate::i18n::t;
 
@@ -38,6 +38,7 @@ pub fn render_title_bar(
     // The title bar drags the window on mouse down; keep clicks on its
     // controls from starting a drag.
     let no_drag = |_: &MouseDownEvent, _: &mut Window, cx: &mut App| cx.stop_propagation();
+    let switcher = target.clone();
     TitleBar::new()
         .child(
             h_flex()
@@ -105,6 +106,17 @@ pub fn render_title_bar(
                 .px_2()
                 .gap_1()
                 .on_mouse_down(MouseButton::Left, no_drag)
+                .child(
+                    Button::new("quick-switcher-open")
+                        .ghost()
+                        .small()
+                        .icon(IconName::Search)
+                        .tooltip_with_action(t!("switcher.title"), &ShowQuickSwitcher, None)
+                        .accessibility_label(t!("switcher.title"))
+                        .on_click(move |_, window, cx| {
+                            switcher.dispatch_action(&ShowQuickSwitcher, window, cx)
+                        }),
+                )
                 .child(
                     Button::new("toggle-hosts")
                         .ghost()

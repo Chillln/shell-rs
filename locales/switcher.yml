@@ -1,0 +1,29 @@
+_version: 2
+
+switcher.title:
+  zh-CN: 快速切换
+  en: Quick switch
+switcher.search:
+  zh-CN: 搜索主机、标签或命令…
+  en: Search hosts, tabs, or commands…
+switcher.tabs:
+  zh-CN: 已打开的标签
+  en: Open tabs
+switcher.hosts:
+  zh-CN: 主机
+  en: Hosts
+switcher.commands:
+  zh-CN: 常用命令
+  en: Commands
+switcher.empty:
+  zh-CN: 没有匹配的主机、标签或命令
+  en: No matching hosts, tabs, or commands
+switcher.current:
+  zh-CN: 当前标签
+  en: Current tab
+switcher.help:
+  zh-CN: ↑ ↓ 选择，Enter 打开，Esc 清空搜索，再按一次关闭
+  en: ↑ ↓ select · Enter open · Esc clear search, then close
+app.shortcut.quick_switcher:
+  zh-CN: 快速切换主机、标签或命令
+  en: Switch hosts, tabs, or commands

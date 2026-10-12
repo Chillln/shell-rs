@@ -169,7 +169,9 @@ pub struct Workspace {
     pub(super) explorers: HashMap<ExplorerId, Entity<ExplorerPanel>>,
     pub(super) local_terminals: HashMap<LocalTerminalId, Entity<LocalTerminalPanel>>,
     /// The settings tab, while it is open. There is only ever one.
-    settings_tab: Option<Entity<SettingsPanel>>,
+    pub(super) settings_tab: Option<Entity<SettingsPanel>>,
+    /// 由工作区持有，关闭后释放搜索状态和主机快照。
+    pub(super) quick_switcher: Option<Entity<super::quick_switcher::QuickSwitcher>>,
     /// What the settings tab edits; the workspace applies it to the window.
     settings: Entity<SettingsStore>,
     /// Where the `shellrs` command and the agent skills go, and whether
@@ -549,6 +551,7 @@ impl Workspace {
             explorers: HashMap::new(),
             local_terminals: HashMap::new(),
             settings_tab: None,
+            quick_switcher: None,
             settings,
             cli_integration: cx.new(|_| CliIntegration::new(None)),
             cli_server: None,
@@ -2586,6 +2589,9 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_next_tab))
             .on_action(cx.listener(Self::on_previous_tab))
             .on_action(cx.listener(Self::on_switch_to_tab))
+            .on_action(cx.listener(Self::on_show_quick_switcher))
+            .on_action(cx.listener(Self::on_close_quick_switcher))
+            .on_action(cx.listener(Self::on_choose_quick_target))
             .on_action(cx.listener(Self::on_close_tabs))
             .on_action(cx.listener(Self::on_rename_terminal))
             .on_action(cx.listener(Self::on_rename_explorer))
@@ -2684,6 +2690,7 @@ impl Render for Workspace {
                     }),
             )
             .child(status)
+            .children(self.quick_switcher.clone())
             .children(Root::render_sheet_layer(window, cx))
             .children(Root::render_dialog_layer(window, cx))
             .children(

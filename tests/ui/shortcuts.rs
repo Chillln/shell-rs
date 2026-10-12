@@ -34,6 +34,14 @@ fn open_shortcuts(cx: &mut TestAppContext, handle: WindowHandle<Root>) {
     in_frame(cx, handle, |window, cx| {
         window.within("settings").click("0-3", cx)
     });
+    // 通用命令可继续扩展，先滚动到标签快捷键所在的区域再操作。
+    in_frame(cx, handle, |window, cx| {
+        window.scroll(
+            "settings",
+            gpui_kit::ScrollDelta::Pixels(point(px(0.), px(-200.))),
+            cx,
+        );
+    });
 }
 
 fn overrides(workspace: &Entity<Workspace>, cx: &mut TestAppContext) -> serde_json::Value {

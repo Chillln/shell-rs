@@ -81,7 +81,16 @@ macro_rules! shortcut {
 }
 
 /// The shortcuts of 设置 › 键盘快捷键, in the order the page lists them.
-pub static SHORTCUTS: [Shortcut; 25] = [
+pub static SHORTCUTS: [Shortcut; 26] = [
+    shortcut!(
+        "quick-switcher",
+        "app.shortcut.quick_switcher",
+        General,
+        &[],
+        "cmd-shift-p",
+        "ctrl-shift-p",
+        ShowQuickSwitcher
+    ),
     shortcut!(
         "new-host",
         "app.shortcut.new_host",
