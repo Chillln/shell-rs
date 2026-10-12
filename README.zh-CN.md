@@ -47,6 +47,8 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 - 标签栏实时显示这条 SSH 连接的往返延迟。
 - 支持查找（智能大小写）和本地清屏，字体、字号、行高都可以设置。
 - 标签可以拖成左右或上下分栏，终端和 SFTP 并排看。
+- 标题栏「快速切换」统一搜索主机、已打开的标签和常用命令，快捷键为 Ctrl+Shift+P（macOS 为 ⌘⇧P）。
+- 根据去重后的远端历史命令预测输入，按右方向键补入建议、回车执行；只缓存当前连接的历史，不在本地保存命令。常见 Bash / Zsh 提示符无需配置，可在「设置 → 终端 → 终端交互」关闭。
 
 **右侧栏工具**
 
@@ -54,7 +56,9 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 - 系统监控：系统信息、CPU（含每个核）、内存、网卡速率和磁盘占用，每 2 秒刷新。
 - 网络连接、进程管理和系统服务：搜索和筛选，查看进程详情、结束进程，启动、停止、重启 systemd 服务，开关开机启动，查看日志。这三项和系统监控只支持 Linux。
 - Docker：按 compose 项目列出容器，启停、重启、看详情和日志，管理卷、镜像和网络。不是 root 时用免密码的 sudo（系统服务也是）。
-- 历史命令读主机上的 `~/.bash_history`，命令片段所有主机共用、可以分类；点一下输入到终端，或直接执行。
+- Docker 容器可打开独立终端并重新连接，自动进入容器的命令不会写入主机交互历史。
+- 容器和系统服务日志支持自动刷新、暂停、关键字筛选和时间范围选择，大量日志在远端限制读取量。
+- 历史命令根据登录 shell 读取 bash、zsh 或 fish 的历史文件，识别时间、多行记录并去重；命令片段所有主机共用、可以分类。点一下输入到终端，或直接执行。
 
 **SFTP**
 
@@ -64,6 +68,7 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 - 删除（本地移到废纸篓）、重命名、新建、修改权限（3×3 复选框加八进制，可递归）。
 - 内置编辑器：双击文本文件直接编辑，⌘S 原地写回服务器，保存前检查文件是否被别人改过；常见格式语法高亮。图片和 Markdown 可以预览。
 - 每个 SFTP 标签单独建立连接，只请求 SFTP 子系统，不要求服务器提供 shell。
+- 双向目录联动：在 SFTP 中打开终端当前目录，或从 SFTP 当前目录新建终端。尚未报告目录时，可从终端工具栏「启用目录报告…」新建带目录报告的 Bash 标签页，无需编辑远端配置。
 
 **从堡垒机打开**
 
@@ -115,16 +120,13 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 
 ## 下载
 
-从 GitHub [Releases](https://github.com/Chillln/shell-rs/releases) 下载对应平台的安装包。Beta 版在 Releases 中标为 Pre-release。应用内不再检查或安装更新。
+从 GitHub [Releases](https://github.com/Chillln/shell-rs/releases/latest) 下载当前正式版本的安装包。Beta 版在 Releases 中标为 Pre-release。应用内不再检查或安装更新，更新时下载并运行新安装包即可。
 
 | 系统 | 安装包 | 说明 |
 | --- | --- | --- |
-| macOS 11+（Apple Silicon） | `ShellRS-<版本>-macos-aarch64.dmg` | 已签名并经过 Apple 公证。打开 DMG，把 ShellRS 拖进「应用程序」 |
-| macOS 11+（Intel） | `ShellRS-<版本>-macos-x86_64.dmg` | 已签名并经过 Apple 公证。打开 DMG，把 ShellRS 拖进「应用程序」 |
 | Windows x64 | `ShellRS-<版本>-windows-x86_64-setup.exe` | 按当前用户安装，不需要管理员权限。安装程序暂未签名，SmartScreen 拦下时点「更多信息 › 仍要运行」 |
-| Linux x64 | `ShellRS-<版本>-linux-x86_64.AppImage` | `chmod +x` 后直接运行，需要 glibc 2.35 以上（Ubuntu 22.04、Debian 12 及更新的版本） |
 
-每个安装包都附带一份 `SHA256SUMS` 校验和。
+当前发布流程提供 Windows 安装包，macOS / Linux 可从源码构建。每个版本同时提供 `SHA256SUMS` 校验文件。
 
 ## 快速上手
 
@@ -133,6 +135,13 @@ ShellRS 把 Xshell 式的主机管理和多标签终端、WinSCP 式的双栏 SF
 3. 右键主机选「打开 SFTP」，或点终端标签栏右侧的「SFTP」，在两栏之间拖动文件即可上传、下载。
 4. 标题栏「ShellRS」后面的三个图标切换侧栏：主机、端口转发、凭据。
 5. ⌘T（Ctrl+T）打开本地终端。把标签拖到中间区域的上、下、左、右边缘，就能分栏。
+6. Ctrl+Shift+P（macOS 为 ⌘⇧P）打开快速切换，输入名称切换到主机或标签。
+
+### 使用预测与目录联动
+
+输入远端历史已有命令的前缀即可显示灰色建议，按右方向键采纳，Tab 保留 shell 原生补全。新命令尚未写入远端历史时，Bash 可执行 `history -a` 后刷新右侧「历史命令」。密码提示和全屏程序中不显示预测；复杂提示符可按[配置说明](docs/shell-integration.md)添加提示符报告。
+
+终端尚未报告目录时，点击标签工具栏的「启用目录报告… → 新建并启用」。这会打开同一主机的 Bash 标签页，自动启用目录和提示符报告。配置只作用于新标签页，重新连接仍然生效；远端须支持 POSIX shell 并安装 Bash。报告可用后，目录按钮会在 SFTP 中打开当前目录。自动入口通过 SSH exec 执行，不会写入交互命令历史。
 
 ## 给 AI Agent 用
 
@@ -163,6 +172,7 @@ cargo run
 ## 文档
 
 - [使用手册](docs/manual.md)：每个功能的详细说明和快捷键
+- [目录报告与历史命令预测](docs/shell-integration.md)：一键启用、远端历史刷新和自定义 shell 配置
 - [开发与测试](docs/development.md)：构建、测试和数据目录
 - [发布流程](docs/release.md)：打包、签名和发布步骤
 - [更新日志](CHANGELOG.md)
