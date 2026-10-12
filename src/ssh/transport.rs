@@ -50,6 +50,7 @@ impl RemoteTerminalTransportProvider for SshTerminalTransportProvider {
         Arc::new(SshTerminalTransport {
             config: SshConnectionConfig::from(login),
             connector: self.connector.clone(),
+            command: login.terminal_command().map(str::to_owned),
         })
     }
 }
@@ -60,6 +61,8 @@ impl RemoteTerminalTransportProvider for SshTerminalTransportProvider {
 struct SshTerminalTransport {
     config: SshConnectionConfig,
     connector: SshConnector,
+    /// 直接走 SSH exec，避开主机交互 shell 的命令历史。
+    command: Option<String>,
 }
 
 impl TerminalTransportFactory for SshTerminalTransport {
@@ -172,7 +175,13 @@ impl SshTerminalTransport {
             _ = shutdown.changed() => bail!(t!("ssh.connect.cancelled")),
         }
         tokio::select! {
-            result = channel.request_shell(true) => {
+            result = async {
+                if let Some(command) = &self.command {
+                    channel.exec(true, command.as_str()).await
+                } else {
+                    channel.request_shell(true).await
+                }
+            } => {
                 result.map_err(|_| anyhow!(t!("ssh.terminal.shell_refused")))?
             }
             _ = shutdown.changed() => bail!(t!("ssh.connect.cancelled")),
@@ -429,6 +438,7 @@ mod tests {
         input: Vec<u8>,
         /// Every command run through an exec channel, in order.
         execs: Vec<String>,
+        shell_requests: usize,
     }
 
     #[derive(Clone)]
@@ -612,6 +622,7 @@ mod tests {
             channel: russh::ChannelId,
             session: &mut server::Session,
         ) -> Result<(), Self::Error> {
+            self.state.lock().unwrap().shell_requests += 1;
             session.channel_success(channel)?;
             session.data(channel, &b"ready\r\n"[..])?;
             Ok(())
@@ -633,6 +644,10 @@ mod tests {
                 .push(String::from_utf8_lossy(command).into_owned());
             session.channel_success(channel)?;
             // 模拟日志准备较慢和服务器一直不结束读取的情况。
+            if command == b"container shell" {
+                session.data(channel, b"container-ready\r\n".to_vec())?;
+                return Ok(());
+            }
             if command == b"delayed log" {
                 let handle = session.handle();
                 tokio::spawn(async move {
@@ -1911,6 +1926,34 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn a_container_terminal_uses_exec_with_a_pty_without_a_host_shell_or_typed_command() {
+        let Some(server) = start_server(TestAuth::Password) else {
+            return;
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let login = HostLogin::of(&password_host(server.port), None)
+            .with_terminal_command(Some("container shell".into()));
+        connect(
+            login,
+            &directory.path().join("known_hosts"),
+            Arc::new(NoSecretStore),
+            false,
+            &[],
+            trust_and_type_password,
+        );
+        let state = server.state.lock().unwrap();
+        assert!(state.pty.is_some());
+        assert!(
+            state
+                .execs
+                .iter()
+                .any(|command| command == "container shell")
+        );
+        assert_eq!(state.shell_requests, 0);
+        assert!(state.input.is_empty());
     }
 
     #[test]

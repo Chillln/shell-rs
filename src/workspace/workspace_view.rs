@@ -461,6 +461,7 @@ impl Workspace {
                 remote_terminal_provider.clone(),
                 terminal_id,
                 id,
+                None,
                 window,
                 cx,
             );
@@ -1121,12 +1122,10 @@ impl Workspace {
             self.remote_terminal_provider.clone(),
             terminal_id,
             host_id,
+            command,
             window,
             cx,
         );
-        if let Some(command) = command {
-            panel.update(cx, |panel, cx| panel.set_launch_command(command, cx));
-        }
         self._subscriptions.push(subscription);
         let focus = panel.read(cx).focus_handle(cx);
         self._subscriptions.push(follow_focus(
@@ -2252,15 +2251,17 @@ fn new_terminal_panel(
     remote_provider: SharedRemoteTerminalTransportProvider,
     terminal_id: RemoteTerminalId,
     host_id: HostId,
+    command: Option<String>,
     window: &mut Window,
     cx: &mut Context<Workspace>,
 ) -> (Entity<TerminalPanel>, Subscription) {
     let panel = cx.new(|cx| {
-        TerminalPanel::new(
+        TerminalPanel::new_with_command(
             terminal_id,
             host_id,
             store.clone(),
             remote_provider,
+            command,
             window,
             cx,
         )

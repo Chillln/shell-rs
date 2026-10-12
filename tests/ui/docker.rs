@@ -432,16 +432,25 @@ async fn live_logs_refresh_pause_search_and_change_range(cx: &mut TestAppContext
 #[gpui_kit::test]
 async fn a_running_container_opens_an_independent_terminal(cx: &mut TestAppContext) {
     let factory = Arc::new(FakeTerminalFactory::answering(&[READING]));
-    let handle = open_docker(cx, factory.clone());
+    let provider = Arc::new(RecordingRemoteProvider {
+        factory: factory.clone(),
+        ..Default::default()
+    });
+    let (handle, _) = open_workspace_with_remote_provider(cx, HostStore::seed(), provider.clone());
+    in_frame(cx, handle, |window, cx| {
+        window.click(("terminal-tab", INITIAL_WEB_TERMINAL), cx)
+    });
+    in_frame(cx, handle, |window, cx| window.click("tool-docker", cx));
     wait_for_reading(cx, handle).await;
     let starts = factory.starts();
     in_frame(cx, handle, |window, cx| {
         window.click("docker-terminal:forex-web", cx)
     });
     cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
-        factory
-            .written_text()
-            .contains("exec $d exec -it \"ccc333\" /bin/bash")
+        provider
+            .logins()
+            .iter()
+            .any(|login| login.terminal_command().is_some())
     })
     .await;
     assert_eq!(factory.starts(), starts + 1);
@@ -449,7 +458,19 @@ async fn a_running_container_opens_an_independent_terminal(cx: &mut TestAppConte
         assert!(window.try_find(("terminal", FIRST_NEW_TERMINAL)).is_some());
         assert!(window.try_find("container-details").is_none());
     });
-    let count = factory.written_text().matches("sh -c").count();
+    let command = provider
+        .logins()
+        .last()
+        .unwrap()
+        .terminal_command()
+        .unwrap()
+        .to_owned();
+    assert!(command.contains("$d exec -it \"ccc333\" /bin/bash"));
+    assert!(
+        factory.written_text().is_empty(),
+        "入口命令不输入主机的交互 shell"
+    );
+    let count = provider.logins().len();
     in_frame(cx, handle, |window, cx| {
         window.dispatch_action(
             Box::new(ReconnectTerminal(RemoteTerminalId(FIRST_NEW_TERMINAL))),
@@ -457,9 +478,14 @@ async fn a_running_container_opens_an_independent_terminal(cx: &mut TestAppConte
         )
     });
     cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
-        factory.written_text().matches("sh -c").count() > count
+        provider.logins().len() > count
     })
     .await;
+    assert_eq!(
+        provider.logins().last().unwrap().terminal_command(),
+        Some(command.as_str())
+    );
+    assert!(factory.written_text().is_empty());
 }
 
 #[gpui_kit::test]
@@ -499,9 +525,7 @@ async fn container_terminal_keeps_the_origin_host_after_switching_tabs(cx: &mut 
         )
     });
     cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
-        factory
-            .written_text()
-            .contains("exec $d exec -it \"ccc333\" /bin/bash")
+        factory.starts() == 3
     })
     .await;
     cx.update_window(handle.into(), |_, _, cx| {

@@ -244,13 +244,25 @@ pub fn open_workspace_with_remote_factory(
     store: HostStore,
     factory: Arc<dyn TerminalTransportFactory>,
 ) -> (WindowHandle<Root>, Entity<Workspace>) {
+    open_workspace_with_remote_provider(
+        cx,
+        store,
+        Arc::new(FixedRemoteTerminalTransportProvider::new(factory)),
+    )
+}
+
+/// 可记录每次连接的运行时配置，包括不会写入交互输入的通道入口。
+pub fn open_workspace_with_remote_provider(
+    cx: &mut TestAppContext,
+    store: HostStore,
+    remote: Arc<dyn RemoteTerminalTransportProvider>,
+) -> (WindowHandle<Root>, Entity<Workspace>) {
     init_app(cx);
     // Dialogs still, as in every fixture: see `open_workspace_with_tester`.
     cx.update(|cx| cx.set_reduce_motion(true));
     let mut workspace = None;
     let handle = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
         let store = cx.new(|_| store);
-        let remote = Arc::new(FixedRemoteTerminalTransportProvider::new(factory.clone()));
         let view = cx.new(|cx| {
             Workspace::new_with_services(
                 store,

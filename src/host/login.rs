@@ -50,6 +50,8 @@ pub struct HostLogin {
     /// session per connection and ends it when another channel comes and
     /// goes, as Xshell and OpenSSH never make it do.
     pub shell_only: bool,
+    /// 此次终端通道直接执行的入口，只在当前标签内保留，不随主机落盘。
+    terminal_command: Option<String>,
 }
 
 /// How a connection reaches a host, with every jump host's login looked up.
@@ -156,6 +158,7 @@ impl HostLogin {
             key_path: None,
             route: LoginRoute::Direct,
             shell_only: false,
+            terminal_command: None,
         }
     }
 
@@ -185,6 +188,7 @@ impl HostLogin {
             password,
             route: LoginRoute::Direct,
             shell_only: false,
+            terminal_command: None,
         }
     }
 
@@ -192,6 +196,15 @@ impl HostLogin {
     pub fn with_route(mut self, route: LoginRoute) -> Self {
         self.route = route;
         self
+    }
+
+    pub fn with_terminal_command(mut self, command: Option<String>) -> Self {
+        self.terminal_command = command;
+        self
+    }
+
+    pub fn terminal_command(&self) -> Option<&str> {
+        self.terminal_command.as_deref()
     }
 
     /// How `host` logs in, given the credential it uses, as if it were
