@@ -238,17 +238,20 @@ async fn the_connections_are_read_each_time_they_come_on_screen_and_only_then(
     cx.run_until_parked();
     assert_eq!(factory.exec_count(), 1);
 
-    // Back, the list it had shows at once while it is read again.
-    in_frame(cx, handle, |window, cx| {
-        window.click("tool-connections", cx)
-    });
-    in_frame(cx, handle, |window, _| {
-        assert!(
-            window
-                .try_find("netstat-socket:tcp 0.0.0.0:80 0.0.0.0:*")
-                .is_some()
-        );
-    });
+    // 先阻止模拟刷新返回，确定性地验证等待新数据时仍显示旧列表。
+    {
+        let _pending_reply = factory.exec_outputs.lock().unwrap();
+        in_frame(cx, handle, |window, cx| {
+            window.click("tool-connections", cx)
+        });
+        in_frame(cx, handle, |window, _| {
+            assert!(
+                window
+                    .try_find("netstat-socket:tcp 0.0.0.0:80 0.0.0.0:*")
+                    .is_some()
+            );
+        });
+    }
     wait_for_label(
         cx,
         handle,
