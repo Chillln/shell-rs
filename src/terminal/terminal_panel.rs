@@ -44,6 +44,9 @@ pub struct TerminalPanel {
     /// A title the user gave this tab, to tell apart several connections to
     /// the same host. Lives as long as the tab, like the rest of the layout.
     custom_title: Option<SharedString>,
+    /// 每次连接建立后执行一次；在断开期间保留启动意图。
+    launch_command: Option<String>,
+    pending_command: Option<String>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -80,6 +83,7 @@ impl TerminalPanel {
         let subscriptions = vec![
             cx.observe(&store, |_, _, cx| cx.notify()),
             cx.observe(&terminal, |this, _, cx| {
+                this.run_pending_command(cx);
                 cx.emit(TerminalPanelEvent::StatusChanged(this.id, this.host_id));
                 cx.notify();
             }),
@@ -111,6 +115,8 @@ impl TerminalPanel {
             remote_provider,
             tab_group: None,
             custom_title: None,
+            launch_command: None,
+            pending_command: None,
             _subscriptions: subscriptions,
         }
     }
@@ -145,6 +151,33 @@ impl TerminalPanel {
         &self.terminal
     }
 
+    /// 设置此标签的启动命令，普通连接不改变主机的配置。
+    pub fn set_launch_command(&mut self, command: String, cx: &mut Context<Self>) {
+        self.pending_command = Some(command.clone());
+        self.launch_command = Some(command);
+        self.run_pending_command(cx);
+    }
+
+    fn run_pending_command(&mut self, cx: &mut Context<Self>) {
+        if self.lifecycle(cx) != TerminalLifecycle::Running {
+            return;
+        }
+        let Some(command) = self.pending_command.take() else {
+            return;
+        };
+        if let Err(error) = self.terminal.update(cx, |terminal, cx| {
+            terminal.enter_command(&command, true, false, cx)
+        }) {
+            cx.emit(TerminalPanelEvent::Notice(
+                self.id,
+                TerminalNotice::Program {
+                    title: None,
+                    body: error.to_string(),
+                },
+            ));
+        }
+    }
+
     pub fn lifecycle(&self, cx: &App) -> TerminalLifecycle {
         self.terminal.read(cx).lifecycle(cx)
     }
@@ -159,6 +192,7 @@ impl TerminalPanel {
             return;
         };
         let factory = self.remote_provider.factory_for(&login);
+        self.pending_command = self.launch_command.clone();
         self.terminal.update(cx, |terminal, cx| {
             terminal.restart_with_factory(factory, cx)
         });

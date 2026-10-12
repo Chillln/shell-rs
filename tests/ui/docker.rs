@@ -388,6 +388,95 @@ async fn live_logs_refresh_pause_search_and_change_range(cx: &mut TestAppContext
     assert_eq!(factory.exec_count(), count);
 }
 
+#[gpui_kit::test]
+async fn a_running_container_opens_an_independent_terminal(cx: &mut TestAppContext) {
+    let factory = Arc::new(FakeTerminalFactory::answering(&[READING]));
+    let handle = open_docker(cx, factory.clone());
+    wait_for_reading(cx, handle).await;
+    let starts = factory.starts();
+    in_frame(cx, handle, |window, cx| {
+        window.click("docker-terminal:forex-web", cx)
+    });
+    cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
+        factory
+            .written_text()
+            .contains("exec $d exec -it \"ccc333\" /bin/bash")
+    })
+    .await;
+    assert_eq!(factory.starts(), starts + 1);
+    in_frame(cx, handle, |window, _| {
+        assert!(window.try_find(("terminal", FIRST_NEW_TERMINAL)).is_some());
+        assert!(window.try_find("container-details").is_none());
+    });
+    let count = factory.written_text().matches("sh -c").count();
+    in_frame(cx, handle, |window, cx| {
+        window.dispatch_action(
+            Box::new(ReconnectTerminal(RemoteTerminalId(FIRST_NEW_TERMINAL))),
+            cx,
+        )
+    });
+    cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
+        factory.written_text().matches("sh -c").count() > count
+    })
+    .await;
+}
+
+#[gpui_kit::test]
+async fn a_stopped_container_cannot_open_a_terminal(cx: &mut TestAppContext) {
+    let factory = Arc::new(FakeTerminalFactory::answering(&[READING]));
+    let handle = open_docker(cx, factory.clone());
+    wait_for_reading(cx, handle).await;
+    let starts = factory.starts();
+    in_frame(cx, handle, |window, cx| {
+        window.click("docker-terminal:exciting_tesla", cx)
+    });
+    cx.run_until_parked();
+    assert_eq!(factory.starts(), starts);
+    assert!(factory.written_text().is_empty());
+}
+
+#[gpui_kit::test]
+async fn container_terminal_keeps_the_origin_host_after_switching_tabs(cx: &mut TestAppContext) {
+    let factory = Arc::new(FakeTerminalFactory::answering(&[READING]));
+    let (handle, workspace) =
+        open_workspace_with_remote_factory(cx, HostStore::seed(), factory.clone());
+    in_frame(cx, handle, |window, cx| {
+        window.click(("terminal-tab", INITIAL_WEB_TERMINAL), cx)
+    });
+    in_frame(cx, handle, |window, cx| window.click("tool-docker", cx));
+    wait_for_reading(cx, handle).await;
+    in_frame(cx, handle, |window, cx| {
+        window.click(("terminal-tab", INITIAL_STAGING_TERMINAL), cx)
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.dispatch_action(
+            Box::new(shellrs::app::OpenContainerTerminal::new(
+                RemoteTerminalId(INITIAL_WEB_TERMINAL),
+                "ccc333",
+            )),
+            cx,
+        )
+    });
+    cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
+        factory
+            .written_text()
+            .contains("exec $d exec -it \"ccc333\" /bin/bash")
+    })
+    .await;
+    cx.update_window(handle.into(), |_, _, cx| {
+        assert_eq!(
+            workspace
+                .read(cx)
+                .remote_terminal(RemoteTerminalId(FIRST_NEW_TERMINAL))
+                .unwrap()
+                .read(cx)
+                .host_id(),
+            HostId(WEB_01)
+        );
+    })
+    .unwrap();
+}
+
 const VOLUME: &str = r#"[{"CreatedAt":"2026-09-01T08:00:00+08:00","Driver":"local","Labels":{},
 "Mountpoint":"/var/lib/docker/volumes/vw-data/_data","Name":"vw-data","Options":null,"Scope":"local"}]"#;
 

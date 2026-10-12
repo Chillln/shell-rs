@@ -341,6 +341,24 @@ pub struct ControlContainers {
     pub command: ContainerCommand,
 }
 
+/// 从指定主机的容器打开终端，目标不随当前标签变化。
+#[derive(Action, Clone, PartialEq, Eq)]
+#[action(namespace = shellrs, no_json)]
+#[non_exhaustive]
+pub struct OpenContainerTerminal {
+    pub terminal: RemoteTerminalId,
+    pub id: String,
+}
+
+impl OpenContainerTerminal {
+    pub fn new(terminal: RemoteTerminalId, id: impl Into<String>) -> Self {
+        Self {
+            terminal,
+            id: id.into(),
+        }
+    }
+}
+
 /// Open the details of a container, an image, a volume or a network of the
 /// host of the SSH terminal in front.
 #[derive(Action, Clone, PartialEq, Eq)]

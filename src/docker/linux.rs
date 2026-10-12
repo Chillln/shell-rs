@@ -119,6 +119,15 @@ pub fn logs_command_in_range(id: &str, seconds: u64) -> Option<String> {
     })
 }
 
+/// 先探测 bash 是否存在，再在同一个交互终端中进入容器。
+pub fn terminal_command(id: &str) -> Option<String> {
+    let id = quoted(&[id.to_owned()])?;
+    Some(format!(
+        "sh -c '{DOCKER}if $d exec {id} /bin/bash -c \"exit 0\" >/dev/null 2>&1; \
+         then exec $d exec -it {id} /bin/bash; else exec $d exec -it {id} /bin/sh; fi'"
+    ))
+}
+
 /// Docker's complaint, in ShellRS's words where it is one a user can do
 /// something about.
 fn complaint(said: &str) -> String {
@@ -1032,6 +1041,7 @@ v2.25.0
             inspect_command(DockerObject::Container, "aaa").unwrap(),
             inspect_command(DockerObject::Network, "n1").unwrap(),
             logs_command("aaa").unwrap(),
+            terminal_command("aaa").unwrap(),
         ]
     }
 
@@ -1047,6 +1057,17 @@ v2.25.0
             assert!(!script.contains('\n'), "{script}");
             assert!(!script.contains("\\\\"), "{script}");
         }
+    }
+
+    #[test]
+    fn container_terminal_validates_its_id_and_selects_a_shell() {
+        let command = terminal_command("aaa111").unwrap();
+        assert!(command.contains("/bin/bash -c \"exit 0\""));
+        assert!(command.contains("exec $d exec -it \"aaa111\" /bin/bash"));
+        assert!(command.contains("exec $d exec -it \"aaa111\" /bin/sh"));
+        assert!(terminal_command("aaa; rm -rf /").is_none());
+        assert!(terminal_command("\"quoted\"").is_none());
+        assert!(terminal_command("").is_none());
     }
 
     #[cfg(unix)]

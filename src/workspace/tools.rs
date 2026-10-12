@@ -21,8 +21,8 @@ use gpui_kit::*;
 
 use crate::app::{
     CenterTab, ControlContainers, ControlService, CopyCommand, EndProcess, EnterCommand,
-    RefreshConnections, RefreshDocker, RefreshHistory, RefreshProcesses, RefreshServices,
-    RemoveDockerObject, ShowDockerObject, ShowProcess, ShowService, SortProcesses,
+    OpenContainerTerminal, RefreshConnections, RefreshDocker, RefreshHistory, RefreshProcesses,
+    RefreshServices, RemoveDockerObject, ShowDockerObject, ShowProcess, ShowService, SortProcesses,
     ToggleDockerProject, ToggleMonitorDetail, ToggleTool, ToggleToolSidebar, ToolKind,
 };
 use crate::docker::{
@@ -33,7 +33,7 @@ use crate::host::HostOs;
 use crate::i18n::t;
 use crate::processes::{end_command, ended, open_process_dialog};
 use crate::services::{ServiceCommand, control_command, controlled, open_service_dialog};
-use crate::shared::confirm_danger;
+use crate::shared::{RenamableTab as _, confirm_danger};
 use crate::terminal::exec_answer;
 
 use super::{
@@ -291,10 +291,42 @@ impl Workspace {
         let dispatch = self.focus_handle.clone();
         if action.object == DockerObject::Container {
             if let Some(container) = tools.container(&action.id, cx) {
-                open_container_dialog(container, terminal.view, dispatch, window, cx);
+                open_container_dialog(container, terminal.view, terminal.id, dispatch, window, cx);
             }
         } else if let Some(summary) = tools.docker_summary(action.object, &action.id, cx) {
             open_object_dialog(summary, terminal.view, dispatch, window, cx);
+        }
+    }
+
+    pub(super) fn on_open_container_terminal(
+        &mut self,
+        action: &OpenContainerTerminal,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(origin) = self.terminals.get(&action.terminal) else {
+            return;
+        };
+        let host = origin.read(cx).host_id();
+        let Some(command) = docker::terminal_command(&action.id) else {
+            return;
+        };
+        let Some(container) = self
+            .tools
+            .read(cx)
+            .container_for(action.terminal, &action.id, cx)
+        else {
+            return;
+        };
+        if !container.state.is_up() {
+            window.push_notification(Notification::warning(t!("docker.terminal_stopped")), cx);
+            return;
+        }
+        if let Some(id) = self.connect_host_with_command(host, Some(command), window, cx) {
+            let title = t!("docker.terminal_title", name = container.name);
+            if let Some(panel) = self.terminals.get(&id) {
+                panel.update(cx, |panel, cx| panel.set_custom_title(Some(title), cx));
+            }
         }
     }
 

@@ -2,7 +2,7 @@
 //! opens.
 
 use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, WindowExt as _,
+    ActiveTheme as _, Disableable as _, Icon, IconName, Sizable as _, WindowExt as _,
     button::{Button, ButtonVariants as _},
     dialog::DialogFooter,
     h_flex,
@@ -16,10 +16,10 @@ use super::details::{Read, message, reading, render_sections, run};
 use super::docker_panel::state_color;
 use super::linux::{inspect_command, logs_command_in_range, parse_details};
 use super::model::{Container, ContainerCommand, ContainerDetails, ContainerSubject, DockerObject};
-use crate::app::{CatalogIcon, ControlContainers, RemoveDockerObject};
+use crate::app::{CatalogIcon, ControlContainers, OpenContainerTerminal, RemoveDockerObject};
 use crate::i18n::t;
 use crate::shared::soft_tag;
-use crate::terminal::{LogView, TerminalView};
+use crate::terminal::{LogView, RemoteTerminalId, TerminalView};
 
 /// How wide the dialog is: long IDs, image names and environment lines.
 const DIALOG_WIDTH: f32 = 46.;
@@ -30,6 +30,7 @@ const DIALOG_WIDTH: f32 = 46.;
 pub fn open_container_dialog(
     container: Container,
     terminal: WeakEntity<TerminalView>,
+    origin: RemoteTerminalId,
     dispatch: FocusHandle,
     window: &mut Window,
     cx: &mut App,
@@ -104,8 +105,27 @@ pub fn open_container_dialog(
                 })
         };
         let up = container.state.is_up();
+        let enter = {
+            let dispatch = dispatch.clone();
+            let action = OpenContainerTerminal::new(origin, container.id.clone());
+            Button::new("container-terminal")
+                .outline()
+                .disabled(!up)
+                .icon(Icon::new(CatalogIcon::Terminal))
+                .label(t!("docker.open_terminal"))
+                .tooltip(if up {
+                    t!("docker.open_terminal")
+                } else {
+                    t!("docker.terminal_stopped")
+                })
+                .on_click(move |_, window, cx| {
+                    window.close_dialog(cx);
+                    dispatch.dispatch_action(&action, window, cx);
+                })
+        };
         let footer = DialogFooter::new()
             .justify_start()
+            .child(enter)
             .child(control(if up {
                 ContainerCommand::Stop
             } else {

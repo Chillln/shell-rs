@@ -22,8 +22,8 @@ use super::model::{
 };
 use super::object_details::tone_color;
 use crate::app::{
-    CatalogIcon, ControlContainers, RefreshDocker, RemoveDockerObject, ShowDockerObject,
-    ToggleDockerProject,
+    CatalogIcon, ControlContainers, OpenContainerTerminal, RefreshDocker, RemoveDockerObject,
+    ShowDockerObject, ToggleDockerProject,
 };
 use crate::i18n::t;
 use crate::shared::{soft_tag, tinted};
@@ -143,6 +143,16 @@ impl DockerPanel {
     /// A container of the host on screen, as the list last showed it.
     pub fn container(&self, id: &str) -> Option<Container> {
         self.table()?.container(id).cloned()
+    }
+
+    /// 从发起动作的连接快照查找容器，不读取后来切换到的主机。
+    pub fn container_for(&self, terminal: RemoteTerminalId, id: &str) -> Option<Container> {
+        self.hosts
+            .get(&terminal)?
+            .table
+            .as_ref()?
+            .container(id)
+            .cloned()
     }
 
     /// A volume, an image or a network of the host on screen, as its card
@@ -357,6 +367,7 @@ impl DockerPanel {
                 } else {
                     let rows = Rc::new(rows);
                     let dispatch = self.dispatch.clone();
+                    let origin = self.target.as_ref().map(|target| target.terminal);
                     list.child(
                         gpui_kit::list(self.list.clone(), move |index, _, cx| {
                             let last = index + 1 == rows.len();
@@ -365,6 +376,7 @@ impl DockerPanel {
                                     &table,
                                     &table.projects()[*index],
                                     *unfolded,
+                                    origin,
                                     &dispatch,
                                     cx,
                                 )
@@ -379,6 +391,7 @@ impl DockerPanel {
                                 DockerRow::Container(index) => render_container(
                                     &table.containers()[*index],
                                     false,
+                                    origin,
                                     &dispatch,
                                     cx,
                                 )
@@ -564,6 +577,7 @@ fn render_project(
     table: &DockerTable,
     project: &Project,
     unfolded: bool,
+    origin: Option<RemoteTerminalId>,
     dispatch: &FocusHandle,
     cx: &App,
 ) -> impl IntoElement {
@@ -673,6 +687,7 @@ fn render_project(
                     .child(render_container(
                         &table.containers()[*index],
                         true,
+                        origin,
                         dispatch,
                         cx,
                     ))
@@ -685,6 +700,7 @@ fn render_project(
 fn render_container(
     container: &Container,
     in_project: bool,
+    origin: Option<RemoteTerminalId>,
     dispatch: &FocusHandle,
     cx: &App,
 ) -> impl IntoElement {
@@ -695,6 +711,8 @@ fn render_container(
     };
     let (open, more) = (dispatch.clone(), dispatch.clone());
     let (id, more_id) = (container.id.clone(), container.id.clone());
+    let enter = dispatch.clone();
+    let container_id = container.id.clone();
     h_flex()
         .id(SharedString::from(format!(
             "docker-container:{}",
@@ -755,6 +773,32 @@ fn render_container(
             dispatch,
             cx,
         ))
+        .child(
+            Button::new(SharedString::from(format!(
+                "docker-terminal:{}",
+                container.name
+            )))
+            .ghost()
+            .small()
+            .disabled(origin.is_none() || !container.state.is_up())
+            .icon(Icon::new(CatalogIcon::Terminal))
+            .tooltip(if container.state.is_up() {
+                t!("docker.open_terminal")
+            } else {
+                t!("docker.terminal_stopped")
+            })
+            .accessibility_label(t!("docker.open_terminal"))
+            .on_click(move |_, window, cx| {
+                cx.stop_propagation();
+                if let Some(origin) = origin {
+                    enter.dispatch_action(
+                        &OpenContainerTerminal::new(origin, container_id.clone()),
+                        window,
+                        cx,
+                    );
+                }
+            }),
+        )
         .child(
             Button::new(SharedString::from(format!(
                 "docker-more:{}",

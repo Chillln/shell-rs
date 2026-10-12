@@ -1102,9 +1102,18 @@ impl Workspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.store.read(cx).host(host_id).is_none() {
-            return;
-        }
+        self.connect_host_with_command(host_id, None, window, cx);
+    }
+
+    /// 新标签可以携带启动命令，避免向正在使用的终端发送输入。
+    pub(super) fn connect_host_with_command(
+        &mut self,
+        host_id: HostId,
+        command: Option<String>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<RemoteTerminalId> {
+        self.store.read(cx).host(host_id)?;
         let terminal_id = RemoteTerminalId(self.next_remote_terminal_id);
         self.next_remote_terminal_id += 1;
         let (panel, subscription) = new_terminal_panel(
@@ -1115,6 +1124,9 @@ impl Workspace {
             window,
             cx,
         );
+        if let Some(command) = command {
+            panel.update(cx, |panel, cx| panel.set_launch_command(command, cx));
+        }
         self._subscriptions.push(subscription);
         let focus = panel.read(cx).focus_handle(cx);
         self._subscriptions.push(follow_focus(
@@ -1128,6 +1140,7 @@ impl Workspace {
         self.dock_area.update(cx, |area, cx| {
             area.add_panel_view(panel_handle(panel), DockPlacement::Center, None, window, cx);
         });
+        Some(terminal_id)
     }
 
     fn on_open_explorer(
@@ -2612,6 +2625,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_toggle_docker_project))
             .on_action(cx.listener(Self::on_show_docker_object))
             .on_action(cx.listener(Self::on_control_containers))
+            .on_action(cx.listener(Self::on_open_container_terminal))
             .on_action(cx.listener(|_, action: &crate::app::ControlLog, _, cx| action.apply(cx)))
             .on_action(cx.listener(Self::on_remove_docker_object))
             .on_action(cx.listener(Self::on_show_hosts))

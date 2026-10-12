@@ -208,6 +208,15 @@ impl ToolSidebar {
         self.docker.read(cx).container(id)
     }
 
+    pub fn container_for(
+        &self,
+        terminal: RemoteTerminalId,
+        id: &str,
+        cx: &App,
+    ) -> Option<Container> {
+        self.docker.read(cx).container_for(terminal, id)
+    }
+
     /// A volume, an image or a network of the host in front, as Docker
     /// last showed it.
     pub fn docker_summary(

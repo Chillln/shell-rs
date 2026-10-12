@@ -1,5 +1,15 @@
 _version: 2
 
+docker.open_terminal:
+  zh-CN: 打开终端
+  en: Open terminal
+docker.terminal_stopped:
+  zh-CN: 启动容器后才能打开终端。
+  en: Start the container before opening a terminal.
+docker.terminal_title:
+  zh-CN: "容器 · %{name}"
+  en: "Container · %{name}"
+
 # Docker: the right sidebar's tool for containers, volumes, images and
 # networks. Docker's own terms stay as Docker says them.
 
