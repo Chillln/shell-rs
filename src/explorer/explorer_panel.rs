@@ -717,6 +717,13 @@ impl ExplorerPanel {
                     cx.write_to_clipboard(ClipboardItem::new_string(paths.join("\n")));
                 }
             }
+            ExplorerCommand::CopyDeleteTargetPath { path } => {
+                cx.write_to_clipboard(ClipboardItem::new_string(path.clone()));
+                window.push_notification(
+                    Notification::success(t!("explorer.delete.path_copied")),
+                    cx,
+                );
+            }
             ExplorerCommand::FocusPane { remote } => {
                 let focus = self.pane(*remote).read(cx).focus_handle(cx);
                 window.focus(&focus, cx);

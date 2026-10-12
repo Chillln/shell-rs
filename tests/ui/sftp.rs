@@ -1361,6 +1361,19 @@ async fn high_risk_remote_delete_requires_the_full_path(cx: &mut TestAppContext)
         cx.update_window(handle.into(), |_, window, cx| {
             window.render_frame(cx);
             assert!(window.find("delete-path-confirmation").visible());
+            assert!(window.find("delete-path-copy").visible());
+            window.click("delete-path-copy", cx);
+        })
+        .unwrap();
+        cx.run_until_parked();
+        assert_eq!(
+            cx.read_from_clipboard().and_then(|item| item.text()),
+            Some("/etc/目录".into())
+        );
+        cx.update_window(handle.into(), |_, window, cx| {
+            window.render_frame(cx);
+            assert!(window.find("delete-path-confirmation").visible());
+            assert_eq!(window.find("delete-path-confirmation").value(), Some(""));
             window.click("delete-path-confirmation", cx);
             window.input("wrong", cx);
             window.click("ok", cx);
@@ -1441,6 +1454,7 @@ async fn force_delete_requires_confirmation_and_uses_remote_paths(cx: &mut TestA
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
         assert!(window.find("ok").visible());
+        assert!(window.try_find("delete-path-copy").is_none());
         window.click("cancel", cx);
     })
     .unwrap();

@@ -7,9 +7,10 @@ use crate::sftp::{RemotePath, delete_confirmation};
 use crate::shared::{commit_footer, dismiss_form_error, form_error_notification};
 use gpui_kit::component::{
     Sizable as _, WindowExt as _,
-    button::ButtonVariant,
+    button::{Button, ButtonVariant},
     dialog::DialogButtonProps,
     form::{Field, Form},
+    h_flex,
     input::{Input, InputState},
     notification::Notification,
     v_flex,
@@ -157,12 +158,38 @@ impl ExplorerPanel {
                 )
                 .show_cancel(true);
             let dialog = if let (Some(required), Some(input)) = (&required, &input) {
+                let path = required.clone();
+                let copy_sender = sender.clone();
                 dialog.child(
                     Form::new().child(
                         Field::new()
                             .label(t!("explorer.delete.type_path", path = required))
                             .required(true)
-                            .child(Input::new(input).id("delete-path-confirmation").small()),
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .child(
+                                        Input::new(input)
+                                            .id("delete-path-confirmation")
+                                            .small()
+                                            .flex_1(),
+                                    )
+                                    .child(
+                                        Button::new("delete-path-copy")
+                                            .outline()
+                                            .small()
+                                            .label(t!("explorer.command.copy_path"))
+                                            .on_click(move |_, window, cx| {
+                                                copy_sender.send(
+                                                    ExplorerCommand::CopyDeleteTargetPath {
+                                                        path: path.clone(),
+                                                    },
+                                                    window,
+                                                    cx,
+                                                );
+                                            }),
+                                    ),
+                            ),
                     ),
                 )
             } else {

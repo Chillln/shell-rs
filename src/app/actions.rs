@@ -494,6 +494,10 @@ pub enum ExplorerCommand {
     CopySelectedPaths {
         remote: bool,
     },
+    /// 复制删除确认弹窗中锁定的远端目标路径。
+    CopyDeleteTargetPath {
+        path: String,
+    },
     /// Move keyboard focus to a pane's file list.
     FocusPane {
         remote: bool,

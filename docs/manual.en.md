@@ -296,7 +296,7 @@ The columns are the same as in WinSCP: Name, Size, Type and Modified on the loca
 - Box selection: press and drag in the empty space to the right of the names, in the size, type, time and other columns, or below the list to draw a selection box; the rows inside it are selected. Start dragging with ⌘ or Shift held to add to the current selection. Dragging to the top or bottom edge of the list scrolls it. Dragging a file name is what drags files to the other side for transfer: pressing on an unselected file name selects only it (deselecting everything else), and only it is dragged; pressing on a selected file name drags everything selected. While dragging, “Upload N items” or “Download N items” appears only over the other side’s list; over your own list or anywhere else it can’t be dropped, the pointer shows that it isn’t allowed.
 - Keyboard: ↑↓, Home, End, PageUp and PageDown move, with Shift to extend the selection; Space or Insert toggles the current row; ⌘A selects all; Tab switches to the other side.
 - Right-clicking an unselected name cell selects it first; right-clicking empty space clears the selection and opens the empty-space menu.
-  - The menu on file names: Edit (for files; images, SVG and Markdown also have Preview, and images other than SVG have only Preview), Upload… / Download…, Copy path (the full paths of the selected items, one per line), Delete, Rename…, Properties…. Double-clicking a folder goes into it, so the menu has no “Open”.
+  - The menu on file names: Edit (for files; images, SVG and Markdown also have Preview, and images other than SVG have only Preview), Upload… / Download…, Copy path (the full paths of the selected items, one per line), Delete, rm -rf Force delete (remote only), Rename…, Properties…. Double-clicking a folder goes into it, so the menu has no “Open”.
   - The empty-space menu: Go to (Parent folder / Root folder / Home folder / Back / Forward), Refresh, Show hidden files (checked means this side shows them), Add path to bookmarks, New.
 
 ### Shortcuts
@@ -323,7 +323,9 @@ The columns are the same as in WinSCP: Name, Size, Type and Modified on the loca
 
 - Deleting asks first, saying what will be deleted and what happens:
   - Local items move to the Trash (the Recycle Bin on Windows).
-  - Remote items are deleted permanently, a folder together with everything in it.
+  - Regular remote deletion uses SFTP and permanently removes files and folders recursively.
+  - Right-click a remote selection for “rm -rf Force delete.” This runs over an SSH command channel and requires a POSIX shell.
+  - Both remote delete methods block the root and common critical system directories. Deleting items inside those directories, an entire home directory, or a mount point requires selecting one target and entering its full path. “Copy path” in the dialog copies that target path for pasting into the confirmation field. Other deletions still require confirmation. These path checks cannot detect custom system directories or mount aliases.
   - Deleting a symbolic link deletes only the link itself.
 - Renaming and creating:
   - The name is checked against the current list: it can’t be empty, can’t be `.` or `..`, and can’t be the same as an existing item’s.

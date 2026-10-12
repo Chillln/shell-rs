@@ -184,8 +184,11 @@ explorer.force_delete.description:
   zh-CN: 将在服务器执行 rm -rf，永久删除「%{directory}」下所选项目及目录内全部内容。此操作无法撤销，仅适用于支持 POSIX shell 的主机。
   en: Runs rm -rf on the server to permanently delete the selected items under “%{directory}” and all folder contents. This cannot be undone and requires a POSIX shell.
 explorer.delete.type_path:
-  zh-CN: 此路径影响系统或大量数据。请输入完整路径「%{path}」以确认
-  en: This path may affect the system or a large amount of data. Type “%{path}” in full to confirm
+  zh-CN: 此路径影响系统或大量数据。输入或粘贴完整路径「%{path}」以确认
+  en: This path may affect the system or a large amount of data. Enter or paste the full path “%{path}” to confirm
+explorer.delete.path_copied:
+  zh-CN: 已复制目标路径
+  en: Target path copied
 
 explorer.command.rename:
   zh-CN: 重命名…
