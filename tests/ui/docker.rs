@@ -314,6 +314,80 @@ async fn a_click_on_a_container_shows_its_details_and_output(cx: &mut TestAppCon
     assert!(factory.exec_commands()[2].contains("$d logs --tail 200"));
 }
 
+#[gpui_kit::test]
+async fn live_logs_refresh_pause_search_and_change_range(cx: &mut TestAppContext) {
+    let first = "INFO ready\nERROR first\n";
+    let next = "INFO ready\nERROR next\n";
+    let factory = Arc::new(FakeTerminalFactory::answering(&[
+        READING, INSPECT, first, next,
+    ]));
+    let handle = open_docker(cx, factory.clone());
+    wait_for_reading(cx, handle).await;
+    in_frame(cx, handle, |window, cx| {
+        window.click("docker-container:forex-web", cx)
+    });
+    wait_for_label(
+        cx,
+        handle,
+        "container-basics:command",
+        "node ./dist/server/entry.mjs",
+    )
+    .await;
+    in_frame(cx, handle, |window, cx| {
+        window.within("container-tabs").click(1usize, cx)
+    });
+    wait_for_label(cx, handle, "container-output", first.trim_end()).await;
+    in_frame(cx, handle, |window, _| {
+        assert_eq!(window.find("log-pause").label(), Some("暂停"));
+    });
+
+    // 定时刷新无需再次点击工具栏。
+    cx.executor().advance_clock(Duration::from_secs(3));
+    wait_for_label(cx, handle, "container-output", next.trim_end()).await;
+    in_frame(cx, handle, |window, cx| window.click("log-pause", cx));
+    in_frame(cx, handle, |window, _| {
+        assert_eq!(window.find("log-pause").label(), Some("继续"));
+    });
+    let count = factory.exec_count();
+    cx.executor().advance_clock(Duration::from_secs(10));
+    cx.run_until_parked();
+    assert_eq!(factory.exec_count(), count);
+
+    in_frame(cx, handle, |window, cx| {
+        window.click("log-search", cx);
+        window.input("error", cx);
+    });
+    wait_for_label(cx, handle, "container-output", "ERROR next").await;
+    in_frame(cx, handle, |window, cx| {
+        window.within("log-range").click(1usize, cx)
+    });
+    cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
+        factory.exec_count() > count
+    })
+    .await;
+    assert!(
+        factory
+            .exec_commands()
+            .last()
+            .unwrap()
+            .contains("--since 900s")
+    );
+
+    let count = factory.exec_count();
+    in_frame(cx, handle, |window, cx| window.click("log-pause", cx));
+    cx.wait_for(handle.into(), Duration::from_secs(5), |_, _| {
+        factory.exec_count() > count
+    })
+    .await;
+    in_frame(cx, handle, |window, cx| {
+        window.within("container-tabs").click(0usize, cx)
+    });
+    let count = factory.exec_count();
+    cx.executor().advance_clock(Duration::from_secs(10));
+    cx.run_until_parked();
+    assert_eq!(factory.exec_count(), count);
+}
+
 const VOLUME: &str = r#"[{"CreatedAt":"2026-09-01T08:00:00+08:00","Driver":"local","Labels":{},
 "Mountpoint":"/var/lib/docker/volumes/vw-data/_data","Name":"vw-data","Options":null,"Scope":"local"}]"#;
 

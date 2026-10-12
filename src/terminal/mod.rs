@@ -7,6 +7,7 @@ mod highlight;
 mod links;
 mod local_pty;
 mod local_terminal_panel;
+mod log_view;
 mod model;
 mod mouse;
 mod notices;
@@ -29,6 +30,7 @@ pub use highlight::{
 };
 pub use local_pty::LocalPtyTransportFactory;
 pub use local_terminal_panel::{LocalTerminalPanel, LocalTerminalPanelEvent};
+pub use log_view::{LogControl, LogView};
 pub use model::{
     LocalTerminalId, RemoteTerminalId, RightClick, TerminalInteraction, TerminalLifecycle,
     TerminalSize, TerminalStatus,

@@ -213,9 +213,6 @@ services.details.tab_journal:
 services.details.unreadable:
   zh-CN: 读不到这个服务的状态
   en: Couldn’t read this service’s state
-services.details.no_journal:
-  zh-CN: 没有日志
-  en: No journal entries
 services.field.load:
   zh-CN: 加载状态
   en: Load state

@@ -108,6 +108,17 @@ pub fn logs_command(id: &str) -> Option<String> {
     ))
 }
 
+/// 按相对时间范围读取日志；范围由应用提供，不拼接用户输入。
+pub fn logs_command_in_range(id: &str, seconds: u64) -> Option<String> {
+    logs_command(id).map(|command| {
+        if seconds == 0 {
+            command
+        } else {
+            command.replace("--timestamps", &format!("--timestamps --since {seconds}s"))
+        }
+    })
+}
+
 /// Docker's complaint, in ShellRS's words where it is one a user can do
 /// something about.
 fn complaint(said: &str) -> String {

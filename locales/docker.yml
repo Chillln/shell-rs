@@ -137,9 +137,6 @@ docker.details.tab_details:
 docker.details.tab_logs:
   zh-CN: 日志
   en: Logs
-docker.details.no_output:
-  zh-CN: 没有输出
-  en: No output
 docker.details.container_gone:
   zh-CN: 读不到这个容器：它可能已经被删除
   en: Couldn’t read this container. It may have been deleted.

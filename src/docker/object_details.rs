@@ -148,7 +148,7 @@ impl Render for ObjectDetailsView {
                 render_sections(prefix(self.summary.object), sections, cx).into_any_element()
             }
             Read::Unknown(why) => message("docker-details-unknown", why.clone(), cx),
-            Read::Reading | Read::NotYet => reading("docker-details-reading", cx),
+            Read::Reading => reading("docker-details-reading", cx),
         };
         div().id("docker-details").test_support().child(body)
     }

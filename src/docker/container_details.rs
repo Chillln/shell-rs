@@ -14,12 +14,12 @@ use gpui_kit::*;
 
 use super::details::{Read, message, reading, render_sections, run};
 use super::docker_panel::state_color;
-use super::linux::{inspect_command, logs_command, parse_details};
+use super::linux::{inspect_command, logs_command_in_range, parse_details};
 use super::model::{Container, ContainerCommand, ContainerDetails, ContainerSubject, DockerObject};
 use crate::app::{CatalogIcon, ControlContainers, RemoveDockerObject};
 use crate::i18n::t;
 use crate::shared::soft_tag;
-use crate::terminal::TerminalView;
+use crate::terminal::{LogView, TerminalView};
 
 /// How wide the dialog is: long IDs, image names and environment lines.
 const DIALOG_WIDTH: f32 = 46.;
@@ -34,7 +34,9 @@ pub fn open_container_dialog(
     window: &mut Window,
     cx: &mut App,
 ) {
-    let view = cx.new(|cx| ContainerDetailsView::new(container.clone(), terminal, cx));
+    let view = cx.new(|cx| {
+        ContainerDetailsView::new(container.clone(), terminal, dispatch.clone(), window, cx)
+    });
     window.open_dialog(cx, move |dialog, window, cx| {
         let color = state_color(container.state, cx);
         let title = v_flex()
@@ -128,21 +130,19 @@ pub fn open_container_dialog(
 /// The dialog's body: what `docker inspect` says about the container, and
 /// its output.
 pub struct ContainerDetailsView {
-    container: Container,
-    terminal: WeakEntity<TerminalView>,
     details: Read<ContainerDetails>,
-    output: Read<String>,
+    output: Entity<LogView>,
     /// 0 the details, 1 the output.
     tab: usize,
-    output_scroll: ScrollHandle,
     _details_task: Task<()>,
-    _output_task: Option<Task<()>>,
 }
 
 impl ContainerDetailsView {
     fn new(
         container: Container,
         terminal: WeakEntity<TerminalView>,
+        dispatch: FocusHandle,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let details = run(
@@ -159,39 +159,29 @@ impl ContainerDetailsView {
                 };
             },
         );
+        let id = container.id.clone();
+        let output = cx.new(|cx| {
+            LogView::new(
+                "container-output",
+                terminal,
+                dispatch,
+                move |seconds| logs_command_in_range(&id, seconds),
+                window,
+                cx,
+            )
+        });
         Self {
-            container,
-            terminal,
             details: Read::Reading,
-            output: Read::NotYet,
+            output,
             tab: 0,
-            output_scroll: ScrollHandle::new(),
             _details_task: details,
-            _output_task: None,
         }
     }
 
     fn select(&mut self, tab: usize, cx: &mut Context<Self>) {
         self.tab = tab;
-        if tab == 1 && matches!(self.output, Read::NotYet) {
-            self.output = Read::Reading;
-            self._output_task = Some(run(
-                &self.terminal,
-                logs_command(&self.container.id),
-                cx,
-                |this, answer| {
-                    this.output = match answer {
-                        Ok(output) if output.trim().is_empty() => {
-                            Read::Unknown(t!("docker.details.no_output").into())
-                        }
-                        Ok(output) => Read::Known(output.trim_end().to_owned()),
-                        Err(why) => Read::Unknown(why),
-                    };
-                    // The newest lines are the last.
-                    this.output_scroll.scroll_to_bottom();
-                },
-            ));
-        }
+        self.output
+            .update(cx, |output, cx| output.set_visible(tab == 1, cx));
         cx.notify();
     }
 
@@ -199,34 +189,13 @@ impl ContainerDetailsView {
         let details = match &self.details {
             Read::Known(details) => details,
             Read::Unknown(why) => return message("container-details-unknown", why.clone(), cx),
-            Read::Reading | Read::NotYet => return reading("container-details-reading", cx),
+            Read::Reading => return reading("container-details-reading", cx),
         };
         v_flex()
             .id("container-details")
             .test_support()
             .child(render_sections("container", &details.sections(), cx))
             .into_any_element()
-    }
-
-    fn render_output(&self, cx: &App) -> AnyElement {
-        match &self.output {
-            Read::Known(output) => div()
-                .id("container-output")
-                .test_support()
-                .aria_label(output.clone())
-                .h(rems(20.))
-                .overflow_y_scroll()
-                .track_scroll(&self.output_scroll)
-                .p_3()
-                .rounded(cx.theme().radius)
-                .bg(cx.theme().muted)
-                .font_family(cx.theme().mono_font_family.clone())
-                .text_xs()
-                .child(output.clone())
-                .into_any_element(),
-            Read::Unknown(why) => message("container-output-unknown", why.clone(), cx),
-            Read::Reading | Read::NotYet => reading("container-output-reading", cx),
-        }
     }
 }
 
@@ -256,7 +225,7 @@ impl Render for ContainerDetailsView {
             .child(if self.tab == 0 {
                 self.render_details(cx)
             } else {
-                self.render_output(cx)
+                self.output.clone().into_any_element()
             })
     }
 }

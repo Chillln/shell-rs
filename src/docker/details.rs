@@ -11,8 +11,6 @@ use crate::terminal::{ExecResult, TerminalView, exec_answer};
 
 /// Something read off the host for a dialog.
 pub(super) enum Read<T> {
-    /// Not asked for yet: a container's output until its tab is opened.
-    NotYet,
     Reading,
     Known(T),
     /// Why not: 「读取失败：命令超时」.

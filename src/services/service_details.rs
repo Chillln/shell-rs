@@ -11,7 +11,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::*;
 
-use super::linux::{log_command, parse_status, status_command};
+use super::linux::{log_command_in_range, parse_status, status_command};
 use super::model::{
     ActiveState, Service, ServiceCommand, ServiceKind, ServiceStatus, file_state_label,
     load_state_label, sub_state_label,
@@ -20,7 +20,7 @@ use super::service_panel::{command_icon, state_color};
 use crate::app::{CatalogIcon, ControlService};
 use crate::i18n::t;
 use crate::shared::{format_bytes, soft_tag};
-use crate::terminal::{ExecResult, TerminalView, exec_answer};
+use crate::terminal::{ExecResult, LogView, TerminalView, exec_answer};
 
 /// How wide the dialog is: two columns of a label and a value, and the
 /// journal's lines.
@@ -36,7 +36,8 @@ pub fn open_service_dialog(
     window: &mut Window,
     cx: &mut App,
 ) {
-    let view = cx.new(|cx| ServiceDetailsView::new(service, terminal, cx));
+    let view =
+        cx.new(|cx| ServiceDetailsView::new(service, terminal, dispatch.clone(), window, cx));
     window.open_dialog(cx, move |dialog, window, cx| {
         let this = view.read(cx);
         let service = this.current();
@@ -101,8 +102,7 @@ pub fn open_service_dialog(
 
 /// Something read off the host for the dialog.
 enum Read<T> {
-    /// Not asked for yet: the journal until its tab is opened.
-    NotYet,
+    /// 正在读取服务状态。
     Reading,
     Known(T),
     /// Why not: 「读取失败：命令超时」.
@@ -112,18 +112,21 @@ enum Read<T> {
 /// The dialog's body: the service's state in full, and its journal.
 pub struct ServiceDetailsView {
     service: Service,
-    terminal: WeakEntity<TerminalView>,
     status: Read<ServiceStatus>,
-    journal: Read<String>,
+    journal: Entity<LogView>,
     /// 0 the state, 1 the journal.
     tab: usize,
-    journal_scroll: ScrollHandle,
     _status_task: Task<()>,
-    _journal_task: Option<Task<()>>,
 }
 
 impl ServiceDetailsView {
-    fn new(service: Service, terminal: WeakEntity<TerminalView>, cx: &mut Context<Self>) -> Self {
+    fn new(
+        service: Service,
+        terminal: WeakEntity<TerminalView>,
+        dispatch: FocusHandle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         let status = run(
             &terminal,
             status_command(&service.name),
@@ -138,15 +141,23 @@ impl ServiceDetailsView {
                 };
             },
         );
+        let name = service.name.clone();
+        let journal = cx.new(|cx| {
+            LogView::new(
+                "service-journal",
+                terminal,
+                dispatch,
+                move |seconds| log_command_in_range(&name, seconds),
+                window,
+                cx,
+            )
+        });
         Self {
             service,
-            terminal,
             status: Read::Reading,
-            journal: Read::NotYet,
+            journal,
             tab: 0,
-            journal_scroll: ScrollHandle::new(),
             _status_task: status,
-            _journal_task: None,
         }
     }
 
@@ -166,25 +177,8 @@ impl ServiceDetailsView {
 
     fn select(&mut self, tab: usize, cx: &mut Context<Self>) {
         self.tab = tab;
-        if tab == 1 && matches!(self.journal, Read::NotYet) {
-            self.journal = Read::Reading;
-            self._journal_task = Some(run(
-                &self.terminal,
-                log_command(&self.service.name),
-                cx,
-                |this, answer, _| {
-                    this.journal = match answer {
-                        Ok(output) if output.trim().is_empty() => {
-                            Read::Unknown(t!("services.details.no_journal").into())
-                        }
-                        Ok(output) => Read::Known(output.trim_end().to_owned()),
-                        Err(why) => Read::Unknown(why),
-                    };
-                    // The newest lines are the last.
-                    this.journal_scroll.scroll_to_bottom();
-                },
-            ));
-        }
+        self.journal
+            .update(cx, |journal, cx| journal.set_visible(tab == 1, cx));
         cx.notify();
     }
 
@@ -192,7 +186,7 @@ impl ServiceDetailsView {
         let status = match &self.status {
             Read::Known(status) => status,
             Read::Unknown(why) => return message("service-status-unknown", why.clone(), cx),
-            Read::Reading | Read::NotYet => return reading("service-status-reading", cx),
+            Read::Reading => return reading("service-status-reading", cx),
         };
         let active = ActiveState::parse(&status.active);
         let number = |value: Option<u64>| value.map_or("—".to_owned(), |value| value.to_string());
@@ -250,27 +244,6 @@ impl ServiceDetailsView {
                 cx,
             ))
             .into_any_element()
-    }
-
-    fn render_journal(&self, cx: &App) -> AnyElement {
-        match &self.journal {
-            Read::Known(journal) => div()
-                .id("service-journal")
-                .test_support()
-                .aria_label(journal.clone())
-                .h(rems(20.))
-                .overflow_y_scroll()
-                .track_scroll(&self.journal_scroll)
-                .p_3()
-                .rounded(cx.theme().radius)
-                .bg(cx.theme().muted)
-                .font_family(cx.theme().mono_font_family.clone())
-                .text_xs()
-                .child(journal.clone())
-                .into_any_element(),
-            Read::Unknown(why) => message("service-journal-unknown", why.clone(), cx),
-            Read::Reading | Read::NotYet => reading("service-journal-reading", cx),
-        }
     }
 }
 
@@ -383,7 +356,7 @@ impl Render for ServiceDetailsView {
             .child(if self.tab == 0 {
                 self.render_status(cx)
             } else {
-                self.render_journal(cx)
+                self.journal.clone().into_any_element()
             })
     }
 }

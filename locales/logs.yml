@@ -1,0 +1,32 @@
+_version: 2
+
+logs.search:
+  zh-CN: 搜索日志
+  en: Search logs
+logs.pause:
+  zh-CN: 暂停
+  en: Pause
+logs.resume:
+  zh-CN: 继续
+  en: Resume
+logs.auto_scroll:
+  zh-CN: 自动滚动
+  en: Auto-scroll
+logs.recent:
+  zh-CN: 最近
+  en: Recent
+logs.minutes:
+  zh-CN: 15 分钟
+  en: 15 minutes
+logs.hour:
+  zh-CN: 1 小时
+  en: 1 hour
+logs.day:
+  zh-CN: 24 小时
+  en: 24 hours
+logs.empty:
+  zh-CN: 没有匹配的日志
+  en: No matching logs
+logs.interval:
+  zh-CN: 每 2 秒刷新最近 200 行；关闭日志页后停止刷新。
+  en: Refreshes the latest 200 lines every 2 seconds while this log view is visible.

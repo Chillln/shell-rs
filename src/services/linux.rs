@@ -148,6 +148,20 @@ pub fn log_command(name: &str) -> Option<String> {
     })
 }
 
+/// journalctl 的时间范围使用整数秒，沿用服务名校验和权限处理。
+pub fn log_command_in_range(name: &str, seconds: u64) -> Option<String> {
+    log_command(name).map(|command| {
+        if seconds == 0 {
+            command
+        } else {
+            command.replace(
+                "--no-pager",
+                &format!("--no-pager --since \"{seconds} seconds ago\""),
+            )
+        }
+    })
+}
+
 /// What the list's command printed.
 #[derive(Debug, PartialEq)]
 pub enum Parsed {

@@ -2612,6 +2612,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_toggle_docker_project))
             .on_action(cx.listener(Self::on_show_docker_object))
             .on_action(cx.listener(Self::on_control_containers))
+            .on_action(cx.listener(|_, action: &crate::app::ControlLog, _, cx| action.apply(cx)))
             .on_action(cx.listener(Self::on_remove_docker_object))
             .on_action(cx.listener(Self::on_show_hosts))
             .on_action(cx.listener(Self::on_show_forwards))

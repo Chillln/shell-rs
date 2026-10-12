@@ -14,7 +14,7 @@ use crate::{
     monitor::MonitorDetail,
     processes::ProcessSort,
     services::ServiceCommand,
-    terminal::{LocalTerminalId, RemoteTerminalId},
+    terminal::{LocalTerminalId, LogControl, LogView, RemoteTerminalId},
 };
 
 gpui_kit::actions!(
@@ -369,6 +369,26 @@ pub struct RemoveDockerObject {
 pub struct EnterCommand {
     pub command: String,
     pub run: bool,
+}
+
+/// 控制指定日志视图，避免焦点变化导致命令作用于其他主机。
+#[derive(Action, Clone, PartialEq)]
+#[action(namespace = shellrs, no_json)]
+pub struct ControlLog {
+    view: WeakEntity<LogView>,
+    control: LogControl,
+}
+
+impl ControlLog {
+    pub fn new(view: WeakEntity<LogView>, control: LogControl) -> Self {
+        Self { view, control }
+    }
+
+    pub fn apply(&self, cx: &mut App) {
+        if let Some(view) = self.view.upgrade() {
+            view.update(cx, |view, cx| view.control(self.control, cx));
+        }
+    }
 }
 
 /// One tab of the center area, by the identity of what it shows.
