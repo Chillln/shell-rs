@@ -399,6 +399,22 @@ impl Workspace {
             cx.observe_in(&settings, window, |this, settings, window, cx| {
                 crate::settings::apply(settings.read(cx).settings(), window, cx);
                 this.sync_cli_server(cx);
+                // 已进入提示符时开启预测也要生效，不必等待下一条协议报告。
+                let terminals: Vec<_> = this
+                    .terminals
+                    .iter()
+                    .filter_map(|(id, panel)| {
+                        panel
+                            .read(cx)
+                            .terminal()
+                            .read(cx)
+                            .has_shell_prompt(cx)
+                            .then_some(*id)
+                    })
+                    .collect();
+                for id in terminals {
+                    this.load_prediction_history(id, cx);
+                }
             }),
             cx.subscribe_in(
                 &settings,

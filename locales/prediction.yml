@@ -4,8 +4,8 @@ prediction.enabled:
   zh-CN: 历史命令预测
   en: History suggestions
 prediction.description:
-  zh-CN: 输入时显示历史命令建议，按右方向键采纳。需要 shell 的提示符报告，密码输入和全屏程序中不显示。
-  en: Suggest history commands while typing; press Right to accept. Requires shell prompt reports. Hidden during password input and fullscreen programs.
+  zh-CN: 读取并去重远端历史，输入时提示，按右方向键采纳。常见提示符无需配置，不在本地保存命令；密码输入和全屏程序中不显示。
+  en: Suggest deduplicated remote history while typing; press Right to accept. Common prompts need no setup. Commands are not saved locally; suggestions stay hidden during password input and fullscreen programs.
 prediction.hint:
   zh-CN: 建议补入「%{suffix}」，按右方向键采纳
   en: Suggested suffix “%{suffix}”; press Right to accept

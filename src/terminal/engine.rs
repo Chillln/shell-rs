@@ -308,6 +308,16 @@ impl TerminalEngine {
         suffix(&prefix, &self.prediction_history).map(str::to_owned)
     }
 
+    pub fn has_shell_prompt(&self) -> bool {
+        self.lifecycle.accepts_input()
+            && self
+                .runtime
+                .prompt
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_ready()
+    }
+
     pub fn reply_to_prompt(&self, request_id: u64, reply: ConnectionPromptReply) {
         self.runtime.reply_to_prompt(request_id, reply);
     }
@@ -347,12 +357,19 @@ impl TerminalEngine {
         let bytes = bytes.into();
         let mut term = self.runtime.term.lock();
         prepare_term_for_user_input(&mut term);
-        self.runtime
+        let inferred = self
+            .runtime
             .prompt
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .input(&bytes);
+            .input(&bytes, &term);
         drop(term);
+        if inferred {
+            let _ = self.event_sender.send(TerminalUiEvent {
+                generation: self.generation,
+                kind: TerminalUiEventKind::ShellPromptReady,
+            });
+        }
         self.runtime.write(bytes);
     }
 
@@ -839,6 +856,9 @@ impl TerminalRuntime {
                                     &bytes[start..],
                                     watcher.is_watching(),
                                 ));
+                                if prompt.observe_output(&bytes, &term) {
+                                    parser_proxy.send(TerminalUiEventKind::ShellPromptReady);
+                                }
                                 lines
                             };
                             if let Some(hit) = watcher.check(lines, Instant::now()) {

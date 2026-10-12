@@ -199,6 +199,17 @@ impl Workspace {
         cx: &mut Context<Self>,
     ) {
         self.tools.update(cx, |tools, cx| tools.refresh_history(cx));
+        if let Some(id) = self.tool_terminal_choice
+            && let Some(panel) = self.terminals.get(&id)
+            && panel.read(cx).terminal().read(cx).has_shell_prompt(cx)
+        {
+            panel
+                .read(cx)
+                .terminal()
+                .clone()
+                .update(cx, |view, _| view.invalidate_prediction_history());
+            self.load_prediction_history(id, cx);
+        }
     }
 
     /// A command of 历史命令 or 命令片段 onto the input line of the SSH

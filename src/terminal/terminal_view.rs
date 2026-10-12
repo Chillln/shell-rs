@@ -408,6 +408,12 @@ impl TerminalView {
                 .prediction_read_at
                 .is_none_or(|at| at.elapsed() >= Duration::from_secs(30))
     }
+    pub fn has_shell_prompt(&self, cx: &App) -> bool {
+        self.engine.read(cx).has_shell_prompt()
+    }
+    pub fn invalidate_prediction_history(&mut self) {
+        self.prediction_read_at = None;
+    }
     pub fn set_prediction_reading(&mut self, task: Task<()>) {
         self.prediction_reading = Some(task);
     }
@@ -422,10 +428,9 @@ impl TerminalView {
         }
         self.prediction_reading = None;
         self.prediction_read_at = Some(Instant::now());
-        if let Some(commands) = commands {
-            self.engine
-                .update(cx, |engine, cx| engine.set_prediction_history(commands, cx));
-        }
+        self.engine.update(cx, |engine, cx| {
+            engine.set_prediction_history(commands.unwrap_or_default(), cx)
+        });
     }
     pub fn prediction(&self, cx: &App) -> Option<String> {
         if !self.focused
