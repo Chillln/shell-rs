@@ -14,8 +14,8 @@ history.panel.truncated:
   zh-CN: 历史文件太长，只读了最后 %{size} KB。
   en: The history file is long, so only its last %{size} KB were read.
 history.panel.note:
-  zh-CN: 这个终端里执行的命令，bash 退出后才会出现在这里。
-  en: Commands run in this terminal show up here once bash exits.
+  zh-CN: 历史文件更新后，点刷新读取新命令。bash 通常在退出时保存历史。
+  en: Refresh after the history file updates to read new commands. bash usually saves history on exit.
 history.panel.empty:
   zh-CN: 没有历史命令
   en: No history
@@ -23,14 +23,14 @@ history.panel.no_match:
   zh-CN: 没有符合条件的命令
   en: No matching commands
 history.panel.not_connected:
-  zh-CN: 终端没有连接。连接后这里显示主机上 bash 的历史命令。
-  en: The terminal isn’t connected. Once it is, the host’s bash history shows here.
+  zh-CN: 终端没有连接。连接后这里显示主机上 shell 的历史命令。
+  en: The terminal isn’t connected. Once it is, the host’s shell history shows here.
 history.panel.missing:
-  zh-CN: 这台主机上还没有 bash 的历史命令（~/.bash_history）。bash 退出时才会写入它。
-  en: This host has no bash history yet (~/.bash_history). bash writes it when it exits.
+  zh-CN: 当前用户还没有可读取的历史文件。shell 保存历史后可重新刷新。
+  en: This user has no readable history file yet. Refresh after the shell saves its history.
 history.panel.unsupported:
-  zh-CN: 暂不支持读取这台主机的历史命令，只支持 bash 的 ~/.bash_history。
-  en: This host’s history can’t be read yet. Only bash’s ~/.bash_history is supported.
+  zh-CN: 暂不支持读取这台主机的历史命令，需要支持 POSIX shell 和 bash、zsh 或 fish 历史文件。
+  en: Reading this host’s history requires a POSIX shell and a bash, zsh or fish history file.
 history.menu.copy:
   zh-CN: 复制
   en: Copy

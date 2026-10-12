@@ -6,5 +6,6 @@
 mod bash;
 mod history_panel;
 mod model;
+mod shell;
 
 pub use history_panel::HistoryPanel;

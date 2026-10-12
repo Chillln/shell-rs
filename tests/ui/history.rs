@@ -184,7 +184,7 @@ async fn a_host_without_a_history_file_says_so(cx: &mut TestAppContext) {
         cx,
         handle,
         "history-message",
-        "这台主机上还没有 bash 的历史命令（~/.bash_history）。bash 退出时才会写入它。",
+        "当前用户还没有可读取的历史文件。shell 保存历史后可重新刷新。",
     )
     .await;
 }
@@ -200,5 +200,25 @@ fn the_history_is_not_offered_on_windows(cx: &mut TestAppContext) {
     in_frame(cx, handle, |window, _| {
         assert!(window.try_find("tool-history").is_none());
         assert!(window.find("tool-snippets").visible());
+    });
+}
+
+#[gpui_kit::test]
+async fn zsh_and_fish_show_their_own_history_and_keep_input_explicit(cx: &mut TestAppContext) {
+    let factory = Arc::new(FakeTerminalFactory::answering(&[
+        "@@shell\nzsh\n@@size\n80\n@@history\n: 1700000000:0;echo 中文\n: 1700000001:0;ls -lh\n",
+        "@@shell\nfish\n@@size\n80\n@@history\n- cmd: echo fish\n  when: 1700000001\n",
+    ]));
+    let handle = open_history(cx, factory.clone());
+    wait_for_label(cx, handle, "history-summary", "共 2 条 · ~/.zsh_history").await;
+    assert!(factory.written_text().is_empty());
+    in_frame(cx, handle, |window, cx| {
+        window.click(entry("echo 中文"), cx)
+    });
+    assert_eq!(factory.written_text(), "\x05\x15echo 中文");
+    in_frame(cx, handle, |window, cx| window.click("history-refresh", cx));
+    wait_for_label(cx, handle, "history-summary", "共 1 条 · fish_history").await;
+    in_frame(cx, handle, |window, _| {
+        assert!(window.find(entry("echo fish")).visible())
     });
 }

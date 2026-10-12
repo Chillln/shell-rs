@@ -4,6 +4,24 @@ use std::collections::HashMap;
 
 use crate::i18n::{t, tn};
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HistorySource {
+    #[default]
+    Bash,
+    Zsh,
+    Fish,
+}
+
+impl HistorySource {
+    pub fn file_label(self) -> &'static str {
+        match self {
+            Self::Bash => "~/.bash_history",
+            Self::Zsh => "~/.zsh_history",
+            Self::Fish => "fish_history",
+        }
+    }
+}
+
 /// A command of the history, listed once however often it ran.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Entry {
@@ -35,6 +53,7 @@ impl Entry {
 /// A host's history: each command once, the newest first.
 #[derive(Debug, PartialEq)]
 pub struct History {
+    source: HistorySource,
     entries: Vec<Entry>,
     /// Whether the file was longer than a reading takes, so older commands
     /// are left out.
@@ -58,11 +77,23 @@ impl History {
                 runs: 1,
             });
         }
-        Self { entries, truncated }
+        Self {
+            source: HistorySource::Bash,
+            entries,
+            truncated,
+        }
     }
 
     pub fn entries(&self) -> &[Entry] {
         &self.entries
+    }
+
+    pub fn with_source(mut self, source: HistorySource) -> Self {
+        self.source = source;
+        self
+    }
+    pub fn source(&self) -> HistorySource {
+        self.source
     }
 
     pub fn truncated(&self) -> bool {

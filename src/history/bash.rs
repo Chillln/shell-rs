@@ -15,6 +15,7 @@ pub const LIMIT: u64 = 512 * 1024;
 /// One line, in single quotes for `sh -c`, so that whatever the login shell
 /// is (bash, zsh, fish, csh) it hands the script to `sh` untouched: the
 /// script has no single quote, and no `!` for csh to expand.
+#[cfg(test)]
 pub fn command() -> String {
     format!(
         "sh -c 'f=$HOME/.bash_history; if test -r \"$f\"; then \

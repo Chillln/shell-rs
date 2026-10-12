@@ -16,8 +16,9 @@ use gpui_kit::component::{
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
-use super::bash::{self, Parsed};
+use super::bash;
 use super::model::{Entry, History};
+use super::shell::{self, Parsed};
 use crate::app::{CatalogIcon, CopyCommand, EnterCommand, RefreshHistory};
 use crate::i18n::{UiLocale, t, tn};
 use crate::shared::command_tooltip;
@@ -144,7 +145,7 @@ impl HistoryPanel {
             loop {
                 let reply = this.update(cx, |_, cx| {
                     let view = target.view.upgrade()?;
-                    view.read(cx).exec(bash::command(), cx)
+                    view.read(cx).exec(shell::command(), cx)
                 });
                 let Ok(reply) = reply else { return };
                 let answer = match reply {
@@ -174,7 +175,7 @@ impl HistoryPanel {
         host.problem = match answer {
             None => Some(Problem::NotConnected),
             Some(Err(error)) => Some(Problem::Failed(error)),
-            Some(Ok(output)) => match bash::parse(&output) {
+            Some(Ok(output)) => match shell::parse(&output) {
                 Parsed::History(history) => {
                     host.history = Some(Rc::new(history));
                     None
@@ -199,8 +200,9 @@ impl HistoryPanel {
     ) -> impl IntoElement {
         let rows = Rc::new(history.matching(&self.query));
         let summary = format!(
-            "{} · ~/.bash_history",
-            tn!("history.panel.count", history.entries().len())
+            "{} · {}",
+            tn!("history.panel.count", history.entries().len()),
+            history.source().file_label()
         );
         let refresh = self.dispatch.clone();
         let header = v_flex()
