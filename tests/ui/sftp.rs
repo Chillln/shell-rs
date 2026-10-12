@@ -783,7 +783,11 @@ async fn sftp_path_label_opens_ancestors_and_the_open_directory_dialog(cx: &mut 
     cx.run_until_parked();
     assert_eq!(
         cx.read_from_clipboard().and_then(|item| item.text()),
-        Some("/local/tester/目录\n/local/tester/文件 甲.txt".into())
+        Some(format!(
+            "{}\n{}",
+            local_test_path("目录").display(),
+            local_test_path("文件 甲.txt").display()
+        ))
     );
 }
 
@@ -833,7 +837,7 @@ async fn sftp_bookmark_dialog_adds_orders_removes_and_opens(cx: &mut TestAppCont
         assert_eq!(window.find("bookmark:/home/tester").selected(), Some(true));
         assert!(!enabled(&window.find("bookmark-add")), "already bookmarked");
         window.click("open-directory-path", cx);
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
         window.input("/etc/", cx);
     })
     .unwrap();
@@ -910,18 +914,21 @@ async fn sftp_bookmark_dialog_adds_orders_removes_and_opens(cx: &mut TestAppCont
     cx.run_until_parked();
     cx.simulate_path_prompt_response(|options| {
         assert!(options.directories && !options.files && !options.multiple);
-        Some(vec!["/picked".into()])
+        Some(vec![picked_test_path()])
     });
     cx.run_until_parked();
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
-        assert_eq!(window.find("open-directory-path").value(), Some("/picked"));
+        assert_eq!(
+            window.find("open-directory-path").value(),
+            Some(picked_test_path().to_string_lossy().as_ref())
+        );
         window.click("open-directory-confirm", cx);
     })
     .unwrap();
     cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
         window.render_frame(cx);
-        window.find("local-path").value() == Some("/picked")
+        window.find("local-path").value() == Some(picked_test_path().to_string_lossy().as_ref())
     })
     .await;
 }
@@ -1541,7 +1548,7 @@ async fn sftp_file_commands_confirm_validate_and_send_one_operation(cx: &mut Tes
     .await;
     assert_eq!(
         local.calls.lock().unwrap()[0],
-        r#"trash ["/local/tester/文件 乙.txt"]"#
+        format!("trash {:?}", [local_test_path("文件 乙.txt")])
     );
 
     // 重命名 checks the name against the listing before sending anything.
@@ -1555,7 +1562,7 @@ async fn sftp_file_commands_confirm_validate_and_send_one_operation(cx: &mut Tes
             window.render_frame(cx);
             if let Some(typed) = typed {
                 window.click("entry-name", cx);
-                window.press("cmd-a", cx);
+                window.press(&primary_key("a"), cx);
                 window.press("backspace", cx);
                 window.input(typed, cx);
             }
@@ -1574,7 +1581,7 @@ async fn sftp_file_commands_confirm_validate_and_send_one_operation(cx: &mut Tes
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
         window.click("entry-name", cx);
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
         window.input("新名字.txt", cx);
         window.click("commit", cx);
     })
@@ -2025,7 +2032,7 @@ async fn the_sftp_tab_can_be_renamed_and_follow_the_host_again(cx: &mut TestAppC
         window.render_frame(cx);
         assert_eq!(window.find("tab-name").value(), Some(default.as_str()));
         window.click("tab-name", cx);
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
         window.input("生产库文件", cx);
         window.click("commit", cx);
     })
@@ -2053,7 +2060,7 @@ async fn the_sftp_tab_can_be_renamed_and_follow_the_host_again(cx: &mut TestAppC
         window.render_frame(cx);
         assert_eq!(window.find("tab-name").value(), Some("生产库文件"));
         window.click("tab-name", cx);
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
         window.press("backspace", cx);
         window.click("commit", cx);
     })

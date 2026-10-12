@@ -50,7 +50,7 @@ async fn sftp_multi_selection_keyboard_upload_freezes_paths_and_cancel_resumes(
     }
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
     })
     .unwrap();
     cx.run_until_parked();
@@ -93,15 +93,15 @@ async fn sftp_multi_selection_keyboard_upload_freezes_paths_and_cancel_resumes(
                 .map(str::to_string)
         };
         assert_eq!(
-            source("/local/tester/文件 甲.txt").as_deref(),
+            source(local_test_path("文件 甲.txt").to_string_lossy().as_ref()).as_deref(),
             Some("文件 甲.txt")
         );
         assert_eq!(
-            source("/local/tester/链接目录").as_deref(),
+            source(local_test_path("链接目录").to_string_lossy().as_ref()).as_deref(),
             Some("链接目录")
         );
         window.click("upload-target", cx);
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
         window.input("/固定目标", cx);
         window.click("upload-confirm", cx);
     })
@@ -455,12 +455,15 @@ async fn sftp_downloads_the_selection_with_f5_into_a_chosen_folder(cx: &mut Test
     assert!(cx.did_prompt_for_paths());
     cx.simulate_path_prompt_response(|options| {
         assert!(options.directories && !options.files && !options.multiple);
-        Some(vec!["/picked".into()])
+        Some(vec![picked_test_path()])
     });
     cx.run_until_parked();
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
-        assert_eq!(window.find("download-target").value(), Some("/picked"));
+        assert_eq!(
+            window.find("download-target").value(),
+            Some(picked_test_path().to_string_lossy().as_ref())
+        );
         window.click("download-confirm", cx);
     })
     .unwrap();
@@ -472,7 +475,7 @@ async fn sftp_downloads_the_selection_with_f5_into_a_chosen_folder(cx: &mut Test
             downloads[0].sources(),
             [RemotePath::new("/home/tester/文件 甲.txt").unwrap()]
         );
-        assert_eq!(downloads[0].destination(), std::path::Path::new("/picked"));
+        assert_eq!(downloads[0].destination(), picked_test_path().as_path());
     }
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
@@ -512,7 +515,7 @@ async fn sftp_dragging_remote_rows_to_a_local_directory_asks_to_download(cx: &mu
             window.render_frame(cx);
             assert_eq!(
                 window.find("download-target").value(),
-                Some("/local/tester/目录")
+                Some(local_test_path("目录").to_string_lossy().as_ref())
             );
             window.find("transfer-summary").label().unwrap().to_string()
         })

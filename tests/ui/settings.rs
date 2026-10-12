@@ -266,7 +266,7 @@ fn settings_open_from_the_host_list_as_one_tab(cx: &mut TestAppContext) {
         assert_eq!(window.find("settings").focused(), Some(true));
         // 使用当前平台的关闭标签快捷键。
         #[cfg(target_os = "macos")]
-        window.press("cmd-w", cx);
+        window.press(&primary_key("w"), cx);
         #[cfg(not(target_os = "macos"))]
         window.press("ctrl-w", cx);
     })
@@ -734,7 +734,7 @@ async fn highlight_rules_are_edited_in_place_on_their_page(cx: &mut TestAppConte
             window.find(("highlight-rule-error", 3usize)).label(),
             Some("正则表达式写法有误")
         );
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
         window.input(r"OutOfMemory\w*", cx);
     });
     in_frame(cx, handle, |window, cx| {
@@ -742,7 +742,7 @@ async fn highlight_rules_are_edited_in_place_on_their_page(cx: &mut TestAppConte
         window.click(("highlight-rule-note", 3usize), cx);
         window.input("内存溢出", cx);
         window.click(("highlight-rule-color", 3usize), cx);
-        window.press("cmd-a", cx);
+        window.press(&primary_key("a"), cx);
         window.input("#D946EF", cx);
         window.click(("highlight-rule-notify", 3usize), cx);
         window.click(("highlight-rule-enabled", 0usize), cx);

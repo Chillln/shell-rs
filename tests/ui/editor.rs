@@ -204,7 +204,7 @@ async fn saving_writes_the_file_back_and_clears_the_mark(cx: &mut TestAppContext
         );
     });
 
-    in_frame(cx, handle, |window, cx| window.press("cmd-s", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("s"), cx));
     wait_for_writes(cx, &provider, 1).await;
     cx.run_until_parked();
 
@@ -227,7 +227,7 @@ async fn saving_writes_the_file_back_and_clears_the_mark(cx: &mut TestAppContext
     // Undoing back to the saved text is no change either; the next save
     // expects the file as saved.
     type_text(cx, handle, "x");
-    in_frame(cx, handle, |window, cx| window.press("cmd-s", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("s"), cx));
     wait_for_writes(cx, &provider, 2).await;
     let expected = provider.writes.lock().unwrap()[1].2;
     assert_eq!(expected, Some(fake_stamp(b"# hello world\n", 101)));
@@ -249,7 +249,7 @@ async fn crlf_and_a_byte_order_mark_are_written_back_as_they_were(cx: &mut TestA
     });
 
     type_text(cx, handle, "c=3\n");
-    in_frame(cx, handle, |window, cx| window.press("cmd-s", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("s"), cx));
     wait_for_writes(cx, &provider, 1).await;
     assert_eq!(
         provider.writes.lock().unwrap()[0].1,
@@ -265,7 +265,7 @@ async fn a_file_changed_on_the_server_is_overwritten_only_when_asked(cx: &mut Te
     type_text(cx, handle, "1");
     provider.change_file(REMOTE_FILE, b"theirs\n");
 
-    in_frame(cx, handle, |window, cx| window.press("cmd-s", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("s"), cx));
     wait_for(cx, handle, "ok").await;
     // Not written: the file is theirs, and the editor keeps its changes.
     assert_eq!(provider.file(REMOTE_FILE), b"theirs\n");
@@ -279,7 +279,7 @@ async fn a_file_changed_on_the_server_is_overwritten_only_when_asked(cx: &mut Te
         );
     });
 
-    in_frame(cx, handle, |window, cx| window.press("cmd-s", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("s"), cx));
     wait_for(cx, handle, "ok").await;
     in_frame(cx, handle, |window, cx| window.click("ok", cx));
     wait_for_writes(cx, &provider, 3).await;
@@ -385,13 +385,13 @@ async fn a_local_file_is_edited_on_this_machine(cx: &mut TestAppContext) {
     in_frame(cx, handle, |window, _| {
         assert_eq!(
             window.find(("editor-path", FIRST.0)).label(),
-            Some(LOCAL_FILE)
+            Some(local_test_path("文件 甲.txt").to_string_lossy().as_ref())
         );
         assert_eq!(window.find("status-connection").label(), Some("本机文件"));
     });
 
     type_text(cx, handle, "edited ");
-    in_frame(cx, handle, |window, cx| window.press("cmd-s", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("s"), cx));
     cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
         window.render_frame(cx);
         window.try_find(("editor-state", FIRST.0)).is_none()
@@ -401,13 +401,10 @@ async fn a_local_file_is_edited_on_this_machine(cx: &mut TestAppContext) {
         local.files.lock().unwrap()[std::path::Path::new(LOCAL_FILE)],
         b"edited local\n"
     );
-    assert!(
-        local
-            .calls
-            .lock()
-            .unwrap()
-            .contains(&format!("write {LOCAL_FILE}"))
-    );
+    assert!(local.calls.lock().unwrap().contains(&format!(
+        "write {}",
+        local_test_path("文件 甲.txt").display()
+    )));
     // Nothing went to the server.
     assert!(provider.writes.lock().unwrap().is_empty());
 }
@@ -449,7 +446,7 @@ async fn saving_while_disconnected_offers_to_reconnect(cx: &mut TestAppContext) 
     })
     .await;
 
-    in_frame(cx, handle, |window, cx| window.press("cmd-s", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("s"), cx));
     wait_for(cx, handle, "ok").await;
     assert!(provider.writes.lock().unwrap().is_empty());
     assert!(cx.update(|cx| {
@@ -798,15 +795,15 @@ async fn a_previewed_image_zooms_and_scrolls(cx: &mut TestAppContext) {
     // The buttons and the keys step the zoom.
     in_frame(cx, handle, |window, cx| window.click("preview-zoom-in", cx));
     wait_for_zoom(cx, handle, "125%").await;
-    in_frame(cx, handle, |window, cx| window.press("cmd--", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("-"), cx));
     wait_for_zoom(cx, handle, "100%").await;
-    in_frame(cx, handle, |window, cx| window.press("cmd-9", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("9"), cx));
     wait_for_zoom(cx, handle, "28%").await;
     in_frame(cx, handle, |window, cx| {
         window.click("preview-zoom-out", cx)
     });
     wait_for_zoom(cx, handle, "25%").await;
-    in_frame(cx, handle, |window, cx| window.press("cmd-0", cx));
+    in_frame(cx, handle, |window, cx| window.press(&primary_key("0"), cx));
     wait_for_zoom(cx, handle, "100%").await;
     in_frame(cx, handle, |window, cx| window.click("preview-fit", cx));
     wait_for_zoom(cx, handle, "28%").await;

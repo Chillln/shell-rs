@@ -74,6 +74,32 @@ pub const DEV_BOX: u64 = 6;
 pub const INITIAL_WEB_TERMINAL: u64 = 1;
 pub const INITIAL_STAGING_TERMINAL: u64 = 2;
 pub const FIRST_NEW_TERMINAL: u64 = 3;
+
+/// 输入框和窗口命令使用当前平台的主修饰键。
+pub fn primary_key(key: &str) -> String {
+    format!(
+        "{}-{key}",
+        if cfg!(target_os = "macos") {
+            "cmd"
+        } else {
+            "ctrl"
+        }
+    )
+}
+
+/// 本地路径按运行平台拼接，远端路径仍使用服务器的斜杠。
+pub fn local_test_path(name: &str) -> std::path::PathBuf {
+    std::path::Path::new("/local/tester").join(name)
+}
+
+/// 模拟系统目录选择器返回绝对路径，无需访问真实目录。
+pub fn picked_test_path() -> std::path::PathBuf {
+    if cfg!(windows) {
+        r"C:\picked".into()
+    } else {
+        "/picked".into()
+    }
+}
 /// Seeded group ids, in insertion order: 生产, 测试, 开发.
 pub const PRODUCTION: u64 = 1;
 pub const DEVELOPMENT: u64 = 3;

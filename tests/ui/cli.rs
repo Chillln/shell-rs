@@ -455,16 +455,14 @@ async fn a_cli_run_a_terminal_cannot_take_says_why(cx: &mut TestAppContext) {
     // Another run has the terminal: no ^C to end it.
     let web = host_id(&workspace, 1, cx);
     let (first, first_events) = TerminalRun::new("sleep 9".into());
-    assert_eq!(start_run(&workspace, &web, &first, cx), Ok(()));
     let before = factory.written_text().len();
+    assert_eq!(start_run(&workspace, &web, &first, cx), Ok(()));
     let (second, _) = TerminalRun::new("true".into());
     assert_eq!(
         start_run(&workspace, &web, &second, cx),
         Err(RunFailure::Busy(BusyReason::AnotherRun))
     );
-    assert_eq!(factory.written_text().len(), before);
-
-    // A shell it cannot type into: only the probe was typed.
+    // 等首个请求的探测完成再检查写入，避免与传输线程处理已排队输入竞争。
     assert_eq!(first_events.recv().unwrap(), RunEvent::Accepted);
     assert_eq!(
         first.drive(&first_events, QUICK, &mut |_| Ok(())),
@@ -474,6 +472,7 @@ async fn a_cli_run_a_terminal_cannot_take_says_why(cx: &mut TestAppContext) {
         factory.written_text()[before..].matches(" sh -c '").count(),
         1
     );
+    assert_eq!(factory.written_text()[before..].matches('\x03').count(), 1);
 
     // The terminal disconnected.
     web_terminal(&workspace, cx).update(cx, |view, cx| view.stop("closed", cx));
