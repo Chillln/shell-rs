@@ -19,6 +19,7 @@ mod host_dialog;
 mod host_tree;
 mod monitor;
 mod netstat;
+mod prediction;
 mod processes;
 mod quick_switcher;
 mod services;

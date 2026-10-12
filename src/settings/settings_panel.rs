@@ -400,6 +400,7 @@ fn terminal_groups(panel: &SettingsPanel, cx: &App) -> Vec<SettingGroup> {
 /// 终端 → 终端交互: what the mouse does besides selecting.
 fn interaction_group(store: &Entity<SettingsStore>) -> SettingGroup {
     let (reader, writer) = (store.clone(), store.clone());
+    let (prediction_reader, prediction_writer) = (store.clone(), store.clone());
     SettingGroup::new()
         .title(t!("settings.interaction.title"))
         .items([
@@ -434,6 +435,28 @@ fn interaction_group(store: &Entity<SettingsStore>) -> SettingGroup {
                 ),
             )
             .description(t!("settings.interaction.right_click_description")),
+            SettingItem::new(
+                t!("prediction.enabled"),
+                SettingField::switch(
+                    move |cx| {
+                        prediction_reader
+                            .read(cx)
+                            .settings()
+                            .terminal_interaction
+                            .command_prediction
+                    },
+                    move |on, cx| {
+                        prediction_writer.update(cx, |store, cx| {
+                            store.update(
+                                |settings| settings.terminal_interaction.command_prediction = on,
+                                cx,
+                            )
+                        });
+                    },
+                )
+                .default_value(true),
+            )
+            .description(t!("prediction.description")),
         ])
 }
 

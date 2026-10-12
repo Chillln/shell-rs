@@ -1,6 +1,6 @@
 use std::ops::Range;
 use std::rc::Rc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use alacritty_terminal::index::{Column, Line, Point as TerminalPoint, Side};
 use alacritty_terminal::selection::SelectionType;
@@ -23,8 +23,8 @@ use gpui_kit::*;
 use unicode_width::UnicodeWidthChar as _;
 
 use crate::app::{
-    CatalogIcon, ClearTerminal, CopyTerminal, DismissTerminalFind, FindInTerminal,
-    FindNextInTerminal, FindPreviousInTerminal, PasteTerminal,
+    AcceptCommandPrediction, CatalogIcon, ClearTerminal, CopyTerminal, DismissTerminalFind,
+    FindInTerminal, FindNextInTerminal, FindPreviousInTerminal, PasteTerminal,
 };
 use crate::connection::{ConnectionPromptReply, Latency};
 use crate::i18n::{UiLocale, t};
@@ -226,6 +226,8 @@ pub struct TerminalView {
     reported_button: Option<ReportButton>,
     /// The cell the program last heard of: motion is reported once a cell.
     reported_cell: Option<(usize, usize)>,
+    prediction_reading: Option<Task<()>>,
+    prediction_read_at: Option<Instant>,
     _subscriptions: Vec<Subscription>,
     _blink_task: Task<()>,
 }
@@ -241,6 +243,7 @@ impl TerminalView {
         let engine = cx.new(|cx| TerminalEngine::new(factory, cx));
         let focus_handle = cx.focus_handle();
         let subscriptions = vec![
+            cx.observe_global::<TerminalInteraction>(|_, cx| cx.notify()),
             cx.observe(&engine, |_, _, cx| cx.notify()),
             // The panel hears the engine's events through the view.
             cx.subscribe(&engine, |_, _, event: &TerminalEvent, cx| {
@@ -313,6 +316,8 @@ impl TerminalView {
             link_tooltip_task: None,
             reported_button: None,
             reported_cell: None,
+            prediction_reading: None,
+            prediction_read_at: None,
             _subscriptions: subscriptions,
             _blink_task: blink_task,
         }
@@ -348,6 +353,8 @@ impl TerminalView {
     /// Forget everything in progress on the screen that is going away: IME
     /// composition, a selection drag, the context menu and the find bar.
     fn reset_interaction(&mut self) {
+        self.prediction_reading = None;
+        self.prediction_read_at = None;
         self.marked_text.clear();
         self.marked_selection = 0..0;
         self.ime_cursor_bounds = None;
@@ -392,6 +399,48 @@ impl TerminalView {
 
     pub fn current_directory(&self, cx: &App) -> Option<String> {
         self.engine.read(cx).current_directory().map(str::to_owned)
+    }
+
+    pub fn needs_prediction_history(&self, cx: &App) -> bool {
+        TerminalInteraction::current(cx).command_prediction
+            && self.prediction_reading.is_none()
+            && self
+                .prediction_read_at
+                .is_none_or(|at| at.elapsed() >= Duration::from_secs(30))
+    }
+    pub fn set_prediction_reading(&mut self, task: Task<()>) {
+        self.prediction_reading = Some(task);
+    }
+    pub fn record_prediction_history(
+        &mut self,
+        generation: u64,
+        commands: Option<Vec<String>>,
+        cx: &mut Context<Self>,
+    ) {
+        if generation != self.generation(cx) {
+            return;
+        }
+        self.prediction_reading = None;
+        self.prediction_read_at = Some(Instant::now());
+        if let Some(commands) = commands {
+            self.engine
+                .update(cx, |engine, cx| engine.set_prediction_history(commands, cx));
+        }
+    }
+    pub fn prediction(&self, cx: &App) -> Option<String> {
+        if !self.focused
+            || !self.marked_text.is_empty()
+            || !TerminalInteraction::current(cx).command_prediction
+        {
+            return None;
+        }
+        self.engine.read(cx).prediction()
+    }
+    pub fn accept_prediction(&mut self, generation: u64, expected: &str, cx: &mut Context<Self>) {
+        if self.generation(cx) == generation && self.prediction(cx).as_deref() == Some(expected) {
+            self.engine.read(cx).paste(expected);
+            cx.notify();
+        }
     }
 
     /// Which connection the terminal is on: counts up with every reconnect.
@@ -574,7 +623,22 @@ impl TerminalView {
             .update(cx, |engine, cx| engine.set_search_query(&query, cx));
     }
 
-    fn on_key_down(&mut self, event: &KeyDownEvent, _: &mut Window, cx: &mut Context<Self>) {
+    fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if event.keystroke.key == "right"
+            && !event.keystroke.modifiers.modified()
+            && let Some(suffix) = self.prediction(cx)
+        {
+            let action = AcceptCommandPrediction {
+                view: cx.entity().downgrade(),
+                generation: self.generation(cx),
+                suffix,
+            };
+            window.defer(cx, move |window, cx| {
+                window.dispatch_action(Box::new(action), cx)
+            });
+            cx.stop_propagation();
+            return;
+        }
         let mode = self.engine.read(cx).mode();
         if let Some(bytes) = encode_key(&event.keystroke, mode) {
             self.send_user_input(bytes, cx);
@@ -949,6 +1013,18 @@ impl EntityInputHandler for TerminalView {
 impl Render for TerminalView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let snapshot = self.engine.read(cx).snapshot();
+        let prediction = self.prediction(cx);
+        let label = prediction.as_ref().map_or_else(
+            || (self.label)(cx),
+            |suffix| {
+                format!(
+                    "{} · {}",
+                    (self.label)(cx),
+                    t!("prediction.hint", suffix = suffix)
+                )
+                .into()
+            },
+        );
         let font = TerminalFont::current(cx);
         let scrollback = ScrollbackHandle::new(
             self.engine.read(cx).scrollback(),
@@ -965,6 +1041,7 @@ impl Render for TerminalView {
             marked_text: self.marked_text.clone(),
             marked_selection: self.marked_selection.clone(),
             requested_size: self.requested_size,
+            prediction,
         };
 
         let terminal = div()
@@ -975,7 +1052,7 @@ impl Render for TerminalView {
             .size_full()
             .font_family(font.family(cx))
             .text_size(font.size)
-            .aria_label((self.label)(cx))
+            .aria_label(label)
             .on_action(cx.listener(|this, _: &SendTab, _, cx| {
                 this.send_user_input(vec![b'\t'], cx);
             }))
@@ -1155,6 +1232,7 @@ struct TerminalElement {
     marked_text: String,
     marked_selection: Range<usize>,
     requested_size: TerminalSize,
+    prediction: Option<String>,
 }
 
 struct TerminalPaintState {
@@ -1165,6 +1243,7 @@ struct TerminalPaintState {
     preedit: Vec<PreeditPaintCell>,
     cursor: Option<PaintQuad>,
     ime_cursor_bounds: Bounds<Pixels>,
+    prediction: Option<PreeditPaintCell>,
 }
 
 struct PreeditPaintCell {
@@ -1423,6 +1502,30 @@ impl Element for TerminalElement {
             })
             .and_then(|_| cursor_quad(cursor_bounds, self.snapshot.cursor_shape, &palette));
 
+        let prediction = self.prediction.as_ref().and_then(|text| {
+            let row = self.snapshot.cursor_row?;
+            let column = self.snapshot.cursor_column;
+            let bounds =
+                geometry.cell_bounds(column, row, self.snapshot.columns.saturating_sub(column));
+            let line = window.text_system().shape_line(
+                text.clone().into(),
+                font_size,
+                &[TextRun {
+                    len: text.len(),
+                    font: text_style.font(),
+                    color: palette.foreground.opacity(0.5),
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+                Some(cell_width),
+            );
+            Some(PreeditPaintCell {
+                bounds,
+                line,
+                background: None,
+            })
+        });
         TerminalPaintState {
             hitbox: window.insert_hitbox(bounds, HitboxBehavior::Normal),
             viewport,
@@ -1431,6 +1534,7 @@ impl Element for TerminalElement {
             preedit,
             cursor,
             ime_cursor_bounds,
+            prediction,
         }
     }
 
@@ -1476,6 +1580,16 @@ impl Element for TerminalElement {
                 if let Some(background) = cell.background.take() {
                     window.paint_quad(background);
                 }
+                let _ = cell.line.paint(
+                    cell.bounds.origin,
+                    cell.bounds.size.height,
+                    TextAlign::Left,
+                    Some(cell.bounds.size.width),
+                    window,
+                    cx,
+                );
+            }
+            if let Some(cell) = state.prediction.as_ref() {
                 let _ = cell.line.paint(
                     cell.bounds.origin,
                     cell.bounds.size.height,

@@ -146,7 +146,7 @@ impl TerminalStatus {
 
 /// 终端 → 终端交互: what the mouse does in terminals besides selecting. A
 /// global, set from the settings, because terminals do not depend on them.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TerminalInteraction {
     /// 选中复制: what a selection takes in goes to the clipboard once the
@@ -154,6 +154,18 @@ pub struct TerminalInteraction {
     pub copy_on_select: bool,
     /// 右键行为.
     pub right_click: RightClick,
+    /// 只在 shell 提示符内显示历史命令建议。
+    pub command_prediction: bool,
+}
+
+impl Default for TerminalInteraction {
+    fn default() -> Self {
+        Self {
+            copy_on_select: false,
+            right_click: RightClick::default(),
+            command_prediction: true,
+        }
+    }
 }
 
 impl Global for TerminalInteraction {}

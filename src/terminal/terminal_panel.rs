@@ -30,6 +30,7 @@ pub enum TerminalPanelEvent {
     PromptRequested(RemoteTerminalId, HostId, ConnectionPrompt),
     HostOsDetected(HostId, HostOs),
     Notice(RemoteTerminalId, TerminalNotice),
+    ShellPromptReady(RemoteTerminalId),
 }
 
 /// A remote-host Dock panel backed by the shared terminal engine. The
@@ -115,6 +116,9 @@ impl TerminalPanel {
                     }
                     TerminalEvent::Notice(notice) => {
                         cx.emit(TerminalPanelEvent::Notice(this.id, notice.clone()));
+                    }
+                    TerminalEvent::ShellPromptReady => {
+                        cx.emit(TerminalPanelEvent::ShellPromptReady(this.id))
                     }
                 },
             ),

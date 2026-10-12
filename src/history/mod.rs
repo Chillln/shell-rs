@@ -9,3 +9,19 @@ mod model;
 mod shell;
 
 pub use history_panel::HistoryPanel;
+
+/// 提供统一的数据边界，终端模块只接收命令快照。
+pub use shell::command as read_command;
+pub fn prediction_commands(output: &str) -> Option<Vec<String>> {
+    let shell::Parsed::History(history) = shell::parse(output) else {
+        return None;
+    };
+    Some(
+        history
+            .entries()
+            .iter()
+            .take(5000)
+            .map(|entry| entry.command.clone())
+            .collect(),
+    )
+}

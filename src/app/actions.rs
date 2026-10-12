@@ -14,7 +14,7 @@ use crate::{
     monitor::MonitorDetail,
     processes::ProcessSort,
     services::ServiceCommand,
-    terminal::{LocalTerminalId, LogControl, LogView, RemoteTerminalId},
+    terminal::{LocalTerminalId, LogControl, LogView, RemoteTerminalId, TerminalView},
 };
 
 gpui_kit::actions!(
@@ -395,6 +395,15 @@ pub struct RemoveDockerObject {
 pub struct EnterCommand {
     pub command: String,
     pub run: bool,
+}
+
+/// 只采纳原终端、原连接代次中仍然显示的建议。
+#[derive(Action, Clone, PartialEq)]
+#[action(namespace = shellrs, no_json)]
+pub struct AcceptCommandPrediction {
+    pub view: WeakEntity<TerminalView>,
+    pub generation: u64,
+    pub suffix: String,
 }
 
 /// 控制指定日志视图，避免焦点变化导致命令作用于其他主机。

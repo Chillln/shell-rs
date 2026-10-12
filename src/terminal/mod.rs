@@ -12,6 +12,7 @@ mod log_view;
 mod model;
 mod mouse;
 mod notices;
+mod prediction;
 mod run;
 mod scrollbar;
 mod search;

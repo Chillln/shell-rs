@@ -2310,6 +2310,7 @@ fn new_terminal_panel(
             TerminalPanelEvent::Notice(terminal_id, notice) => {
                 this.on_terminal_notice(CenterTab::Terminal(*terminal_id), notice, window, cx)
             }
+            TerminalPanelEvent::ShellPromptReady(id) => this.load_prediction_history(*id, cx),
         },
     );
     (panel, subscription)
@@ -2601,6 +2602,7 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_restart_local_terminal))
             .on_action(cx.listener(Self::on_copy_terminal))
             .on_action(cx.listener(Self::on_paste_terminal))
+            .on_action(cx.listener(Self::on_accept_command_prediction))
             .on_action(cx.listener(Self::on_find_in_terminal))
             .on_action(cx.listener(Self::on_find_next_in_terminal))
             .on_action(cx.listener(Self::on_find_previous_in_terminal))

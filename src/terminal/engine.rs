@@ -30,6 +30,7 @@ use super::highlight::{
 };
 use super::links::{LinkMarker, url_search, visible_links};
 use super::notices::{NoticeScanner, ProgramNotice, TerminalNotice};
+use super::prediction::{PromptMark, PromptScanner, PromptState, suffix};
 use super::run::{BusyReason, RunFailure, RunHandle};
 use super::search::{MatchMarker, SearchDirection, SearchMark, SearchPosition, TerminalSearch};
 use super::{
@@ -94,6 +95,7 @@ pub struct TerminalEngine {
     title: Option<String>,
     /// 当前连接最后一次完整的目录报告，重连时清空。
     directory: Option<String>,
+    prediction_history: Vec<String>,
     /// The connection's latest round trip, while one is running.
     latency: Option<Latency>,
     /// The open find, if any. Rendering reads it through `&self` and still
@@ -140,6 +142,7 @@ impl TerminalEngine {
             lifecycle: TerminalLifecycle::Starting,
             title: None,
             directory: None,
+            prediction_history: Vec::new(),
             latency: None,
             search: RefCell::new(None),
             url_search: RefCell::new(url_search()),
@@ -203,6 +206,7 @@ impl TerminalEngine {
             TerminalUiEventKind::Title(title) => self.title = sanitize_title(&title),
             TerminalUiEventKind::ResetTitle => self.title = None,
             TerminalUiEventKind::Directory(path) => self.directory = path,
+            TerminalUiEventKind::ShellPromptReady => return Some(TerminalEvent::ShellPromptReady),
             TerminalUiEventKind::Exited { code, signal } => {
                 self.lifecycle = TerminalLifecycle::Exited { code, signal };
                 self.latency = None;
@@ -249,6 +253,7 @@ impl TerminalEngine {
         self.lifecycle = TerminalLifecycle::Starting;
         self.title = None;
         self.directory = None;
+        self.prediction_history.clear();
         self.latency = None;
         // The new emulator starts empty; matches in the old one mean nothing.
         self.search.replace(None);
@@ -275,6 +280,32 @@ impl TerminalEngine {
         matches!(self.lifecycle, TerminalLifecycle::Running)
             .then_some(self.directory.as_deref())
             .flatten()
+    }
+
+    pub fn set_prediction_history(
+        &mut self,
+        commands: Vec<String>,
+        cx: &mut gpui_kit::Context<Self>,
+    ) {
+        self.prediction_history = commands;
+        cx.notify();
+    }
+
+    pub fn prediction(&self) -> Option<String> {
+        if !self.lifecycle.accepts_input() {
+            return None;
+        }
+        let term = self.runtime.term.lock();
+        if term.selection.is_some() {
+            return None;
+        }
+        let prompt = self
+            .runtime
+            .prompt
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let prefix = prompt.prefix(&term)?;
+        suffix(&prefix, &self.prediction_history).map(str::to_owned)
     }
 
     pub fn reply_to_prompt(&self, request_id: u64, reply: ConnectionPromptReply) {
@@ -313,10 +344,16 @@ impl TerminalEngine {
             return;
         }
 
+        let bytes = bytes.into();
         let mut term = self.runtime.term.lock();
         prepare_term_for_user_input(&mut term);
+        self.runtime
+            .prompt
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .input(&bytes);
         drop(term);
-        self.runtime.write(bytes.into());
+        self.runtime.write(bytes);
     }
 
     pub fn prepare_for_user_input(&self) {
@@ -698,10 +735,13 @@ pub enum TerminalEvent {
     HostOsDetected(HostOs),
     /// Something to show the user while they look elsewhere.
     Notice(TerminalNotice),
+    /// shell 已报告可以输入命令的提示符边界。
+    ShellPromptReady,
 }
 
 struct TerminalRuntime {
     term: Arc<FairMutex<AlacrittyTerm>>,
+    prompt: Arc<Mutex<PromptState>>,
     commands: mpsc::Sender<TerminalTransportCommand>,
     size: Arc<Mutex<TerminalSize>>,
     wakeup_pending: Arc<AtomicBool>,
@@ -734,6 +774,8 @@ impl TerminalRuntime {
         let term = Arc::new(FairMutex::new(AlacrittyTerm::new(config, &size, proxy)));
 
         let parser_term = term.clone();
+        let prompt = Arc::new(Mutex::new(PromptState::default()));
+        let parser_prompt = prompt.clone();
         let run: Arc<Mutex<Option<RunHandle>>> = Arc::default();
         let parser_run = run.clone();
         thread::Builder::new()
@@ -742,6 +784,7 @@ impl TerminalRuntime {
                 let mut processor: Processor = Processor::new();
                 // Alacritty drops the notifications programs ask for.
                 let mut notices = NoticeScanner::default();
+                let mut prompts = PromptScanner::default();
                 let mut watcher = LineWatcher::new(current(&highlights));
                 loop {
                     // Output inside a synchronized update is held back until
@@ -772,12 +815,31 @@ impl TerminalRuntime {
                                 // Output that never pauses gives the wait no
                                 // chance to see the time is up.
                                 end_overdue_sync(&mut processor, &mut term);
-                                advance_watching(
+                                let mut lines = Vec::new();
+                                let mut start = 0;
+                                let mut prompt =
+                                    parser_prompt.lock().unwrap_or_else(|e| e.into_inner());
+                                // 在标记结束的位置取光标，不能取整批输出结束后的光标。
+                                for (end, mark) in prompts.scan(&bytes) {
+                                    lines.extend(advance_watching(
+                                        &mut processor,
+                                        &mut term,
+                                        &bytes[start..end],
+                                        watcher.is_watching(),
+                                    ));
+                                    prompt.mark(mark, &term);
+                                    if mark == PromptMark::Ready {
+                                        parser_proxy.send(TerminalUiEventKind::ShellPromptReady);
+                                    }
+                                    start = end;
+                                }
+                                lines.extend(advance_watching(
                                     &mut processor,
                                     &mut term,
-                                    &bytes,
+                                    &bytes[start..],
                                     watcher.is_watching(),
-                                )
+                                ));
+                                lines
                             };
                             if let Some(hit) = watcher.check(lines, Instant::now()) {
                                 parser_proxy.send(TerminalUiEventKind::Keyword(hit));
@@ -850,6 +912,7 @@ impl TerminalRuntime {
 
         Self {
             term,
+            prompt,
             commands,
             size: shared_size,
             wakeup_pending,
@@ -986,6 +1049,7 @@ enum TerminalUiEventKind {
     Title(String),
     ResetTitle,
     Directory(Option<String>),
+    ShellPromptReady,
     Exited {
         code: u32,
         signal: Option<String>,

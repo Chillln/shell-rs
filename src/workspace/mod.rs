@@ -13,6 +13,7 @@ mod forwards;
 mod front;
 mod links;
 mod notices;
+mod prediction;
 mod quick_switcher;
 mod recent_hosts;
 mod sidebar;
