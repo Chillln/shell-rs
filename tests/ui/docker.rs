@@ -35,6 +35,47 @@ const INSPECT: &str = r#"[{"Id":"ccc333","Name":"/forex-web","Created":"2026-09-
 
 const OUTPUT: &str = "2026-09-07T10:59:17Z Listening on http://0.0.0.0:4321\n";
 
+#[gpui_kit::test]
+async fn tall_details_keep_equal_top_and_bottom_margins(cx: &mut TestAppContext) {
+    // 用足够长的环境变量列表触发高度上限，复现详情弹窗底部贴边。
+    let mut inspect: serde_json::Value = serde_json::from_str(INSPECT).unwrap();
+    inspect[0]["Config"]["Env"] = serde_json::json!(
+        (0..80)
+            .map(|i| format!("SETTING_{i}=value"))
+            .collect::<Vec<_>>()
+    );
+    let inspect = inspect.to_string();
+    let factory = Arc::new(FakeTerminalFactory::answering(&[READING, &inspect]));
+    let handle = open_docker(cx, factory);
+    wait_for_reading(cx, handle).await;
+    in_frame(cx, handle, |window, cx| {
+        window.click("docker-container:forex-web", cx)
+    });
+    wait_for_label(cx, handle, "container-basics:name", "forex-web").await;
+    in_frame(cx, handle, |window, _| {
+        let overlay = window.find("dialog").bounds();
+        // 弹窗层与首个标签都使用编号零，按观察到的身份路径取弹窗层。
+        let dialog = gpui_kit::base::test_support::snapshots(window)
+            .into_iter()
+            .filter(|element| {
+                element.path().contains(&ElementId::Name("dialog".into()))
+                    && element.path().last() == Some(&ElementId::Integer(0))
+            })
+            .min_by_key(|element| element.path().len())
+            .unwrap()
+            .bounds();
+        let top = dialog.top() - overlay.top();
+        let bottom = overlay.bottom() - dialog.bottom();
+        assert!(dialog.size.height >= overlay.size.height * 0.85);
+        assert!(top > px(0.));
+        assert!(
+            (top - bottom).abs() <= px(1.),
+            "上下留白：{top:?} / {bottom:?}"
+        );
+        assert!(window.find("container-dialog-stop").bounds().bottom() < dialog.bottom());
+    });
+}
+
 fn open_docker(cx: &mut TestAppContext, factory: Arc<FakeTerminalFactory>) -> WindowHandle<Root> {
     let (handle, _) = open_workspace_with_remote_factory(cx, HostStore::seed(), factory);
     in_frame(cx, handle, |window, cx| {

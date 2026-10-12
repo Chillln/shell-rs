@@ -18,7 +18,7 @@ use super::linux::{inspect_command, logs_command_in_range, parse_details};
 use super::model::{Container, ContainerCommand, ContainerDetails, ContainerSubject, DockerObject};
 use crate::app::{CatalogIcon, ControlContainers, OpenContainerTerminal, RemoveDockerObject};
 use crate::i18n::t;
-use crate::shared::soft_tag;
+use crate::shared::{fit_tall_dialog, soft_tag};
 use crate::terminal::{LogView, RemoteTerminalId, TerminalView};
 
 /// How wide the dialog is: long IDs, image names and environment lines.
@@ -134,12 +134,11 @@ pub fn open_container_dialog(
             .child(control(ContainerCommand::Restart))
             // Docker removes a running container only by force.
             .when(!up, |footer| footer.child(remove));
-        dialog
+        fit_tall_dialog(dialog, window)
             .title(title)
             // Dialog geometry is an API boundary that takes `Pixels`; the
             // width follows the interface zoom through the rem.
             .w(rems(DIALOG_WIDTH).to_pixels(window.rem_size()))
-            .max_h(window.viewport_size().height * 0.9)
             // Closed by its buttons or Escape, like every dialog.
             .overlay_closable(false)
             .child(view.clone())

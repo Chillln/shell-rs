@@ -5,13 +5,20 @@ use std::rc::Rc;
 use gpui_kit::component::{
     WindowExt as _,
     button::{Button, ButtonVariant, ButtonVariants as _},
-    dialog::{DialogAction, DialogButtonProps, DialogClose, DialogFooter},
+    dialog::{Dialog, DialogAction, DialogButtonProps, DialogClose, DialogFooter},
     notification::{Notification, NotificationType},
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use crate::i18n::t;
+
+/// 长详情弹窗最多占可用高度的九成，上下各保留相同的空间。
+pub fn fit_tall_dialog(dialog: Dialog, window: &Window) -> Dialog {
+    let paddings = gpui_kit::component::window_paddings(window);
+    let height = window.viewport_size().height - paddings.top - paddings.bottom;
+    dialog.margin_top(height * 0.05).max_h(height * 0.9)
+}
 
 /// A form dialog's footer: 取消, and the button that commits the form.
 pub fn commit_footer(id: &'static str, label: impl Into<SharedString>) -> DialogFooter {

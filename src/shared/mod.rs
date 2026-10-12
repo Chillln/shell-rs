@@ -16,7 +16,7 @@ pub use closable_tab::ClosableTabTitle;
 pub use command_line::{command_tooltip, one_line};
 pub use dialog::{
     DeleteHandler, commit_footer, confirm_danger, confirm_delete, dismiss_form_error,
-    form_error_notification, parse_port,
+    fit_tall_dialog, form_error_notification, parse_port,
 };
 pub use format::{format_bytes, format_duration, format_percent};
 pub use host_mark::HostMark;

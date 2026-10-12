@@ -97,12 +97,11 @@ pub fn open_process_dialog(
                             .label(t!("processes.details.kill")),
                     ),
             );
-        dialog
+        crate::shared::fit_tall_dialog(dialog, window)
             .title(title)
             // Dialog geometry is an API boundary that takes `Pixels`; the
             // width follows the interface zoom through the rem.
             .w(rems(DIALOG_WIDTH).to_pixels(window.rem_size()))
-            .max_h(window.viewport_size().height * 0.9)
             // Closed by its buttons or Escape, like every dialog.
             .overlay_closable(false)
             .child(view.clone())

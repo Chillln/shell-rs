@@ -13,7 +13,7 @@ use super::linux::{image_details, inspect_command, network_details, volume_detai
 use super::model::{DetailSection, DockerObject, ObjectSummary, Tone};
 use crate::app::{CatalogIcon, RemoveDockerObject};
 use crate::i18n::t;
-use crate::shared::soft_tag;
+use crate::shared::{fit_tall_dialog, soft_tag};
 use crate::terminal::TerminalView;
 
 /// As wide as a container's details: long IDs, digests and paths.
@@ -87,12 +87,11 @@ pub fn open_object_dialog(
                     dispatch.dispatch_action(&action, window, cx);
                 })
         };
-        dialog
+        fit_tall_dialog(dialog, window)
             .title(title)
             // Dialog geometry is an API boundary that takes `Pixels`; the
             // width follows the interface zoom through the rem.
             .w(rems(DIALOG_WIDTH).to_pixels(window.rem_size()))
-            .max_h(window.viewport_size().height * 0.9)
             // Closed by its button or Escape, like every dialog.
             .overlay_closable(false)
             .child(view.clone())
