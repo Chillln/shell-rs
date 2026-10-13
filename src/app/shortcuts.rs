@@ -496,7 +496,7 @@ fn same_keystroke(a: &Keystroke, b: &Keystroke) -> bool {
 /// Why a key cannot be a shortcut.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// A plain key: it would stop typing it.
+    /// 普通字符键或仅加 Shift 的字符键会妨碍输入。
     NeedsModifier,
     /// 切换到标签 1…9 takes a modifier with a digit.
     NeedsDigit,
@@ -553,7 +553,10 @@ pub fn check(
             return Err(Refusal::NeedsDigit);
         }
         keystroke.key = "1".into();
-    } else if !held && !is_function_key(&keystroke.key) {
+    } else if !held
+        && !is_function_key(&keystroke.key)
+        && !(modifiers.shift && is_editing_key(&keystroke.key))
+    {
         return Err(Refusal::NeedsModifier);
     }
     let keys = keystroke.unparse();
@@ -592,10 +595,19 @@ pub fn check(
     Ok(keys)
 }
 
+/// 只接受常见且不会输入字符的 F1–F12 功能键。
 fn is_function_key(key: &str) -> bool {
     key.strip_prefix('f')
         .and_then(|number| number.parse::<u8>().ok())
-        .is_some_and(|number| (1..=24).contains(&number))
+        .is_some_and(|number| (1..=12).contains(&number))
+}
+
+/// Shift 与这些编辑键组合不会输入字符；方向键仍由选区和终端程序使用。
+fn is_editing_key(key: &str) -> bool {
+    matches!(
+        key,
+        "insert" | "delete" | "home" | "end" | "pageup" | "pagedown"
+    )
 }
 
 /// The keys of a shortcut, one cap each, in the platform's order: ⌃⌥⇧⌘
@@ -1051,7 +1063,17 @@ mod tests {
         assert_eq!(check(new_host, "j"), Err(Refusal::NeedsModifier));
         assert_eq!(check(new_host, "shift-j"), Err(Refusal::NeedsModifier));
         assert_eq!(check(new_host, "f5"), Ok("f5".into()));
+        assert_eq!(check(new_host, "f13"), Err(Refusal::NeedsModifier));
         assert_eq!(check(new_host, "alt-j"), Ok("alt-j".into()));
+        // 允许 Shift 加编辑键；单独按键和 Shift 加方向键仍保留原本用途。
+        let paste = shortcut("terminal-paste");
+        assert_eq!(check(paste, "shift-insert"), Ok("shift-insert".into()));
+        assert_eq!(
+            check(new_host, "shift-pagedown"),
+            Ok("shift-pagedown".into())
+        );
+        assert_eq!(check(paste, "insert"), Err(Refusal::NeedsModifier));
+        assert_eq!(check(paste, "shift-up"), Err(Refusal::NeedsModifier));
         // Taken by another shortcut working anywhere.
         let terminal = shortcut("new-local-terminal");
         assert_eq!(
@@ -1060,6 +1082,11 @@ mod tests {
         );
         // A text field's key.
         assert_eq!(check(new_host, &primary("z")), Err(Refusal::Reserved));
+        let fixed = [KeyBinding::new("shift-home", NoAction, Some("Input"))];
+        assert_eq!(
+            super::check(new_host, &keys("shift-home"), &overrides, &fixed),
+            Err(Refusal::Reserved)
+        );
         // A terminal's key may also work anywhere, where it does something
         // else; inside a terminal the terminal's wins.
         let find = shortcut("terminal-find");
