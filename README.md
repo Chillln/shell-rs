@@ -106,6 +106,7 @@ cargo build --release
 - [russh](https://github.com/Eugeny/russh) 与 [russh-sftp](https://github.com/AspectUnk/russh-sftp)：SSH 与 SFTP 协议支持
 - [alacritty_terminal](https://crates.io/crates/alacritty_terminal) 与 [portable-pty](https://crates.io/crates/portable-pty)：终端模拟与 PTY
 - [keyring](https://crates.io/crates/keyring)：操作系统原生钥匙串对接
+- [Material Icon Theme](https://github.com/material-extensions/vscode-material-icon-theme)：SFTP 彩色文件图标（MIT 许可）
 
 ## 许可证
 

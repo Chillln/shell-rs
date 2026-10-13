@@ -23,6 +23,7 @@ use crate::app::{
     RefreshCliIntegration, RemoveAgentSkill, RemoveCliCommand,
 };
 use crate::cli::{AgentKind, BinaryStatus, CliIntegration, IntegrationStatus, SkillStatus};
+use crate::explorer::{FileIcon, FileIconKind};
 use crate::i18n::t;
 use crate::shared::{ClosableTabTitle, close_tab_items};
 use crate::terminal::{
@@ -238,7 +239,7 @@ struct Category {
 type CategoryGroups = fn(&SettingsPanel, &App) -> Vec<SettingGroup>;
 
 /// The categories, in the order the left column lists them.
-const CATEGORIES: [Category; 7] = [
+const CATEGORIES: [Category; 8] = [
     Category {
         title: "settings.category.appearance",
         icon: CatalogIcon::Palette,
@@ -248,6 +249,11 @@ const CATEGORIES: [Category; 7] = [
         title: "settings.category.terminal",
         icon: CatalogIcon::Terminal,
         groups: terminal_groups,
+    },
+    Category {
+        title: "settings.category.sftp",
+        icon: CatalogIcon::FolderTree,
+        groups: sftp_groups,
     },
     Category {
         title: "settings.category.highlight",
@@ -522,6 +528,91 @@ fn notification_group(store: &Entity<SettingsStore>) -> SettingGroup {
             )
             .description(t!("settings.notifications.bell_description")),
         ])
+}
+
+/// SFTP 图标预览：先显示普通文件夹和文件，再显示常见服务器目录与项目文件。
+/// 隐藏文件的图标和文字都使用较淡样式。
+const FILE_ICON_PREVIEW: &[(&str, FileIconKind)] = &[
+    (".config", FileIconKind::Folder),
+    ("logs", FileIconKind::Folder),
+    ("scripts", FileIconKind::Folder),
+    (".bashrc", FileIconKind::File),
+    ("deploy.sh", FileIconKind::File),
+    ("docker-compose.yml", FileIconKind::File),
+    ("nginx.conf", FileIconKind::File),
+    ("backup.tar.gz", FileIconKind::File),
+];
+
+/// SFTP 设置：文件列表图标及预览。
+fn sftp_groups(panel: &SettingsPanel, _: &App) -> Vec<SettingGroup> {
+    vec![
+        SettingGroup::new()
+            .title(t!("settings.sftp.file_list"))
+            .items([
+                SettingItem::new(
+                    t!("settings.sftp.icon_style"),
+                    choice_field(
+                        &panel.store,
+                        |settings| settings.file_icon_style,
+                        |settings, style| settings.file_icon_style = style,
+                    ),
+                )
+                .description(t!("settings.sftp.icon_style_description")),
+                SettingItem::render(|_, _, cx| {
+                    let row = |id: &str, label: SharedString, icon: FileIcon, hidden: bool| {
+                        h_flex()
+                            .id(ElementId::Name(format!("preview:{id}").into()))
+                            .min_w_0()
+                            .gap_2()
+                            .when(hidden, |row| row.text_color(cx.theme().muted_foreground))
+                            .child(icon.dimmed(hidden))
+                            .child(div().min_w_0().truncate().child(label))
+                            .test_support()
+                    };
+                    // 普通文件夹和文件排在最前，空名称确保使用普通图标。
+                    let plain = [
+                        (
+                            "folder",
+                            t!("settings.sftp.preview_folder"),
+                            FileIconKind::Folder,
+                        ),
+                        ("file", t!("settings.sftp.preview_file"), FileIconKind::File),
+                    ]
+                    .into_iter()
+                    .map(|(id, label, kind)| row(id, label, FileIcon::new("", kind), false));
+                    let named = FILE_ICON_PREVIEW.iter().map(|&(name, kind)| {
+                        row(
+                            name,
+                            name.into(),
+                            FileIcon::new(name, kind),
+                            name.starts_with('.'),
+                        )
+                    });
+                    v_flex()
+                        .w_full()
+                        .gap_2()
+                        .child(div().text_sm().child(t!("settings.preview")))
+                        .child(
+                            div()
+                                .id("file-icon-preview")
+                                .test_support()
+                                .w_full()
+                                .grid()
+                                .grid_cols(2)
+                                .gap_x_4()
+                                .gap_y_1()
+                                .p_3()
+                                .rounded(cx.theme().radius)
+                                .border_1()
+                                .border_color(cx.theme().border)
+                                .bg(cx.theme().tokens.table)
+                                .text_sm()
+                                .children(plain.chain(named)),
+                        )
+                })
+                .keywords(keywords(t!("settings.sftp.keywords"))),
+            ]),
+    ]
 }
 
 /// What the 关键字高亮 preview shows: a service's log followed on a server,

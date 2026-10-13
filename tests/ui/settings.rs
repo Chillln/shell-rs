@@ -27,7 +27,7 @@ fn open_cloud_settings(cx: &mut TestAppContext, handle: WindowHandle<Root>) {
     cx.run_until_parked();
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
-        window.within("settings").click("0-6", cx);
+        window.within("settings").click("0-7", cx);
     })
     .unwrap();
     cx.run_until_parked();
@@ -205,7 +205,7 @@ fn settings_open_from_the_host_list_as_one_tab(cx: &mut TestAppContext) {
         assert!(window.find("settings").visible());
         assert_eq!(window.find("settings").focused(), Some(true));
         assert_eq!(window.find("settings-tab").label(), Some("设置"));
-        assert!(window.try_find("0-7").is_none());
+        assert!(window.try_find("0-8").is_none());
         assert!(window.try_find("update-available").is_none());
         // Two columns: the first category, 外观, is shown until another is
         // picked. `Settings` names its category rows by position.
@@ -284,7 +284,7 @@ fn settings_open_from_the_host_list_as_one_tab(cx: &mut TestAppContext) {
 
 /// The label of one dropdown in the 外观 page's 常规 group. `Settings` names
 /// its groups, items and dropdown buttons by position.
-/// Open the settings tab on 外部 CLI, the fifth category.
+/// 打开设置页第六个分类「外部 CLI」。
 fn open_external_cli_settings(cx: &mut TestAppContext, handle: WindowHandle<Root>) {
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
@@ -294,7 +294,7 @@ fn open_external_cli_settings(cx: &mut TestAppContext, handle: WindowHandle<Root
     cx.run_until_parked();
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
-        window.within("settings").click("0-4", cx);
+        window.within("settings").click("0-5", cx);
     })
     .unwrap();
     cx.run_until_parked();
@@ -611,7 +611,7 @@ fn the_window_settings_are_on_until_turned_off(cx: &mut TestAppContext) {
     in_frame(cx, handle, |window, cx| window.click("open-settings", cx));
     // 「应用」是最后一个设置分类。
     in_frame(cx, handle, |window, cx| {
-        window.within("settings").click("0-5", cx)
+        window.within("settings").click("0-6", cx)
     });
     let switch = |item: usize| {
         move |window: &mut gpui_kit::Window| {
@@ -679,10 +679,9 @@ async fn highlight_rules_are_edited_in_place_on_their_page(cx: &mut TestAppConte
 
     let (handle, workspace) = open_workspace(cx);
     in_frame(cx, handle, |window, cx| window.click("open-settings", cx));
-    // 关键字高亮 comes right after 终端, with the examples a new
-    // installation starts with: rows 0 to 2.
+    // 「关键字高亮」位于终端和 SFTP 之后，新安装的示例规则位于前 3 行。
     in_frame(cx, handle, |window, cx| {
-        window.within("settings").click("0-2", cx)
+        window.within("settings").click("0-3", cx)
     });
     let ip = r"\b\d{1,3}(\.\d{1,3}){3}\b";
     assert_eq!(

@@ -28,11 +28,11 @@ fn terminal(id: u64) -> Option<CenterTab> {
     Some(CenterTab::Terminal(RemoteTerminalId(id)))
 }
 
-/// Open 设置 › 键盘快捷键, the fourth category.
+/// 打开设置页第五个分类「键盘快捷键」。
 fn open_shortcuts(cx: &mut TestAppContext, handle: WindowHandle<Root>) {
     in_frame(cx, handle, |window, cx| window.click("open-settings", cx));
     in_frame(cx, handle, |window, cx| {
-        window.within("settings").click("0-3", cx)
+        window.within("settings").click("0-4", cx)
     });
     // 通用命令可继续扩展，先滚动到标签快捷键所在的区域再操作。
     in_frame(cx, handle, |window, cx| {

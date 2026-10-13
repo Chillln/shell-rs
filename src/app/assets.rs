@@ -3,6 +3,8 @@ use std::borrow::Cow;
 use gpui_kit::assets::icon_assets;
 use gpui_kit::{AssetSource, Result, SharedString};
 
+use crate::explorer::FILE_ICON_ASSETS;
+
 // Icons beyond the default component bundle, embedded from the Lucide
 // catalog shipped with `gpui-kit-assets`.
 icon_assets!(
@@ -133,8 +135,7 @@ const BRAND_ICONS: &[(&str, &[u8])] = &[(
 /// Docker's whale, for `Icon::path`.
 pub const DOCKER_ICON: &str = "icons/brand/docker.svg";
 
-/// Asset source for the application: the default component bundle plus the
-/// extra icons and the marks above.
+/// 应用资源源：合并默认组件资源、额外图标、主机标记和 SFTP 彩色图标。
 pub struct AppAssets;
 
 impl AssetSource for AppAssets {
@@ -142,6 +143,7 @@ impl AssetSource for AppAssets {
         if let Some((_, bytes)) = OS_ICONS
             .iter()
             .chain(BRAND_ICONS)
+            .chain(FILE_ICON_ASSETS)
             .find(|(name, _)| *name == path)
         {
             return Ok(Some(Cow::Borrowed(bytes)));
@@ -159,6 +161,7 @@ impl AssetSource for AppAssets {
             OS_ICONS
                 .iter()
                 .chain(BRAND_ICONS)
+                .chain(FILE_ICON_ASSETS)
                 .map(|(name, _)| *name)
                 .filter(|name| name.starts_with(path))
                 .map(SharedString::from),
@@ -201,5 +204,15 @@ mod tests {
     fn the_bundle_lists_the_operating_system_icons() {
         let listed = AppAssets.list("icons/os/").unwrap();
         assert_eq!(listed.len(), HostOs::ALL.len());
+    }
+
+    #[test]
+    fn the_sftp_color_icons_are_in_the_bundle() {
+        for (path, _) in crate::explorer::FILE_ICON_ASSETS {
+            let bytes = AppAssets.load(path).unwrap().expect("in the bundle");
+            assert!(bytes.starts_with(b"<svg"), "{path} 不是 SVG");
+        }
+        let listed = AppAssets.list("icons/files/").unwrap();
+        assert_eq!(listed.len(), crate::explorer::FILE_ICON_ASSETS.len());
     }
 }
