@@ -7,6 +7,7 @@ mod font;
 mod highlight;
 mod links;
 mod local_pty;
+mod local_shell;
 mod local_terminal_panel;
 mod log_view;
 mod model;
@@ -31,7 +32,8 @@ pub use font::{
 pub use highlight::{
     HighlightColor, HighlightRule, HighlightSet, PatternError, TerminalHighlights, default_rules,
 };
-pub use local_pty::LocalPtyTransportFactory;
+pub use local_pty::LocalPtyTransportProvider;
+pub use local_shell::{LocalShell, default_shell_name, installed_shells, quote_word};
 pub use local_terminal_panel::{LocalTerminalPanel, LocalTerminalPanelEvent};
 pub use log_view::{LogControl, LogView};
 pub use model::{
@@ -52,8 +54,9 @@ pub use terminal_view::{
 pub use theme::{TerminalColors, TerminalTheme};
 pub(crate) use transport::{DEFAULT_EXEC_TIMEOUT, send_event};
 pub use transport::{
-    ExecReply, ExecRequest, ExecResult, FixedRemoteTerminalTransportProvider,
-    RemoteTerminalTransportProvider, SharedRemoteTerminalTransportProvider,
-    SharedTerminalTransportFactory, TerminalTransport, TerminalTransportCommand,
-    TerminalTransportEvent, TerminalTransportFactory,
+    ExecReply, ExecRequest, ExecResult, FixedLocalTerminalTransportProvider,
+    FixedRemoteTerminalTransportProvider, LocalTerminalTransportProvider,
+    RemoteTerminalTransportProvider, SharedLocalTerminalTransportProvider,
+    SharedRemoteTerminalTransportProvider, SharedTerminalTransportFactory, TerminalTransport,
+    TerminalTransportCommand, TerminalTransportEvent, TerminalTransportFactory,
 };

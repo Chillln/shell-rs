@@ -31,6 +31,7 @@ use crate::terminal::{
 };
 
 use super::highlight_rules::HighlightRulesEditor;
+use super::local_shell_editor::{LocalShellEditor, local_shell_field};
 use super::shortcuts_editor::{ShortcutsEditor, shortcut_groups};
 use super::terminal_themes::{app_follows_item, terminal_theme_item};
 use super::{AppSettings, Choice, NotificationSettings, SettingsStore, WindowSettings};
@@ -58,6 +59,8 @@ pub struct SettingsPanel {
     highlight_rules: Entity<HighlightRulesEditor>,
     /// 键盘快捷键, which knows which shortcut is taking new keys.
     shortcuts: Entity<ShortcutsEditor>,
+    /// 本地终端 Shell 输入框及已安装程序列表。
+    local_shell: Entity<LocalShellEditor>,
     /// The monospace families to choose the terminal font from; empty until
     /// the scan in the background comes back.
     font_families: &'static [SharedString],
@@ -67,7 +70,7 @@ pub struct SettingsPanel {
     shown_category: Rc<Cell<usize>>,
     focus_handle: FocusHandle,
     tab_group: Option<WeakEntity<TabGroup>>,
-    _subscriptions: [Subscription; 3],
+    _subscriptions: [Subscription; 4],
     _font_scan: Task<()>,
 }
 
@@ -81,9 +84,11 @@ impl SettingsPanel {
     ) -> Self {
         let highlight_rules = cx.new(|cx| HighlightRulesEditor::new(store.clone(), window, cx));
         let shortcuts = cx.new(|cx| ShortcutsEditor::new(store.clone(), window, cx));
+        let local_shell = cx.new(|cx| LocalShellEditor::new(store.clone(), window, cx));
         let subscriptions = [
             cx.observe(&store, |_, _, cx| cx.notify()),
             cx.observe(&shortcuts, |_, _, cx| cx.notify()),
+            cx.observe(&local_shell, |_, _, cx| cx.notify()),
             cx.observe(&integration, |_, _, cx| cx.notify()),
         ];
         // Loading every family takes a moment the first time; the process
@@ -104,6 +109,7 @@ impl SettingsPanel {
             integration,
             highlight_rules,
             shortcuts,
+            local_shell,
             font_families: &[],
             shown_category: Rc::default(),
             focus_handle: cx.focus_handle(),
@@ -394,7 +400,29 @@ fn terminal_groups(panel: &SettingsPanel, cx: &App) -> Vec<SettingGroup> {
             ]),
         interaction_group(store),
         notification_group(store),
+        local_terminal_group(panel),
     ]
+}
+
+/// 本地终端程序设置：让包含参数的路径占用整行宽度。
+fn local_terminal_group(panel: &SettingsPanel) -> SettingGroup {
+    let (editor, reset) = (panel.local_shell.clone(), panel.local_shell.clone());
+    let store = panel.store.clone();
+    SettingGroup::new()
+        .title(t!("settings.local_terminal.title"))
+        .items([SettingItem::new(
+            t!("settings.local_terminal.shell"),
+            SettingField::render(move |options, _, cx| local_shell_field(&editor, options, cx))
+                .on_reset(
+                    move |cx| store.read(cx).settings().local_terminal.shell.is_some(),
+                    move |window, cx| {
+                        reset.update(cx, |editor, cx| editor.choose(None, window, cx));
+                    },
+                ),
+        )
+        .description(t!("settings.local_terminal.shell_description"))
+        .layout(Axis::Vertical)
+        .keywords(keywords(t!("settings.local_terminal.keywords")))])
 }
 
 /// 终端 → 终端交互: what the mouse does besides selecting.

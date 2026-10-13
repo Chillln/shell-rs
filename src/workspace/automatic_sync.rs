@@ -299,7 +299,8 @@ mod tests {
             SftpTransportProvider,
         },
         terminal::{
-            FixedRemoteTerminalTransportProvider, TerminalTransport, TerminalTransportFactory,
+            FixedLocalTerminalTransportProvider, FixedRemoteTerminalTransportProvider,
+            TerminalTransport, TerminalTransportFactory,
         },
         workspace::Workspace,
     };
@@ -403,7 +404,9 @@ mod tests {
                     Arc::new(FixedRemoteTerminalTransportProvider::new(Arc::new(
                         DisabledServices,
                     ))),
-                    Arc::new(DisabledServices),
+                    Arc::new(FixedLocalTerminalTransportProvider::new(Arc::new(
+                        DisabledServices,
+                    ))),
                     Arc::new(DisabledServices),
                     Arc::new(DisabledServices),
                     Arc::new(DisabledServices),

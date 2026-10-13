@@ -25,6 +25,8 @@ pub struct AppSettings {
     pub terminal_font: TerminalFontSettings,
     /// 终端 → 终端交互.
     pub terminal_interaction: TerminalInteraction,
+    /// 终端 → 本地终端。
+    pub local_terminal: LocalTerminalSettings,
     pub external_cli: ExternalCliSettings,
     /// The SFTP 大小 column, switched from the column title's menu rather
     /// than the settings page, as in WinSCP.
@@ -167,6 +169,14 @@ fn readable_rules<'de, D: Deserializer<'de>>(
         .collect())
 }
 
+/// 终端 → 本地终端。
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LocalTerminalSettings {
+    /// 新建或重启本地终端时运行的程序和参数；`None` 表示每次重新检测系统默认 Shell。
+    pub shell: Option<String>,
+}
+
 /// 终端 → 通知: what a terminal may tell the user about while they look
 /// elsewhere. Both on until the user turns them off.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -222,6 +232,11 @@ impl AppSettings {
     /// file nor a typed value can give the terminal a size of zero.
     pub fn normalized(mut self) -> Self {
         self.terminal_font = self.terminal_font.normalized();
+        self.local_terminal.shell = self
+            .local_terminal
+            .shell
+            .map(|shell| shell.trim().to_string())
+            .filter(|shell| !shell.is_empty());
         self
     }
 }
@@ -431,6 +446,25 @@ mod tests {
             serde_json::from_str(r#"{"show_hidden":{"remote":true}}"#).unwrap();
         assert!(settings.show_hidden.remote);
         assert!(!settings.show_hidden.local);
+    }
+
+    #[test]
+    fn local_terminals_run_the_default_shell_unless_the_file_names_one() {
+        let settings: AppSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(settings.local_terminal.shell, None);
+        let settings: AppSettings =
+            serde_json::from_str(r#"{"local_terminal":{"shell":" /bin/zsh -l "}}"#).unwrap();
+        assert_eq!(
+            settings.normalized().local_terminal.shell.as_deref(),
+            Some("/bin/zsh -l")
+        );
+        let blank = AppSettings {
+            local_terminal: LocalTerminalSettings {
+                shell: Some("  ".into()),
+            },
+            ..AppSettings::default()
+        };
+        assert_eq!(blank.normalized(), AppSettings::default());
     }
 
     #[test]

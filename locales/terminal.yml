@@ -170,6 +170,13 @@ terminal.pty.open_failed:
 terminal.pty.shell_failed:
   zh-CN: 无法启动系统默认 shell
   en: Couldn’t start the default shell
+# 显示本地终端设置中填写的程序和启动失败原因。
+terminal.pty.command_failed:
+  zh-CN: 无法启动 %{command}：%{error}
+  en: "Couldn’t start %{command}: %{error}"
+terminal.pty.unmatched_quote:
+  zh-CN: 设置 → 终端 → 本地终端里的 Shell 有引号没有配对：%{command}
+  en: "The shell in Settings → Terminal → Local terminal has an unmatched quote: %{command}"
 terminal.pty.reader_failed:
   zh-CN: 无法读取本地 PTY
   en: Couldn’t read from the local PTY

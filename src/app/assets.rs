@@ -75,7 +75,8 @@ icon_assets!(
         ZoomOut,
         Zap,
         Highlighter,
-        GripVertical
+        GripVertical,
+        FileSearch
     ]
 );
 

@@ -8,11 +8,24 @@ fn open_workspace_with_factory(
     cx: &mut TestAppContext,
     factory: Arc<FakeTerminalFactory>,
 ) -> (WindowHandle<Root>, Entity<Workspace>) {
+    open_workspace_with_local_terminals(
+        cx,
+        Arc::new(FixedLocalTerminalTransportProvider::new(factory)),
+        size(px(1280.), px(800.)),
+    )
+}
+
+/// 每次启动本地终端时向 `local` 请求传输工厂。
+fn open_workspace_with_local_terminals(
+    cx: &mut TestAppContext,
+    local: Arc<FixedLocalTerminalTransportProvider>,
+    window_size: gpui_kit::Size<gpui_kit::Pixels>,
+) -> (WindowHandle<Root>, Entity<Workspace>) {
     init_app(cx);
     // Dialogs still, as in every fixture: see `open_workspace_with_tester`.
     cx.update(|cx| cx.set_reduce_motion(true));
     let mut workspace = None;
-    let handle = cx.open_window(size(px(1280.), px(800.)), |window, cx| {
+    let handle = cx.open_window(window_size, |window, cx| {
         let store = cx.new(|_| HostStore::seed());
         let remote = Arc::new(FixedRemoteTerminalTransportProvider::new(Arc::new(
             FakeTerminalFactory::default(),
@@ -22,7 +35,7 @@ fn open_workspace_with_factory(
                 store,
                 cx.new(|_| settings_store()),
                 remote,
-                factory.clone(),
+                local.clone(),
                 Arc::new(FakeSftpProvider::default()),
                 Arc::new(FakeLocalDirectory::default()),
                 Arc::new(FakeConnectionTester::default()),
@@ -140,6 +153,77 @@ async fn tab_keys_are_sent_to_the_focused_terminal(cx: &mut TestAppContext) {
         assert_eq!(window.find(("local-terminal", 1_u64)).focused(), Some(true));
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+async fn local_terminals_run_the_shell_the_settings_name(cx: &mut TestAppContext) {
+    let local = fake_local_terminals();
+    // 让窗口足够高，使设置页完整渲染终端分类中的各个设置组。
+    let (handle, workspace) =
+        open_workspace_with_local_terminals(cx, local.clone(), size(px(1280.), px(1600.)));
+    let settings = cx.update(|cx| workspace.read(cx).settings().clone());
+
+    // 未指定时使用系统默认 Shell。
+    in_frame(cx, handle, |window, cx| {
+        window.click("new-local-terminal", cx)
+    });
+    assert_eq!(local.shells(), [LocalShell::default()]);
+
+    // 输入框初始为空；键入内容应立即写入设置。
+    in_frame(cx, handle, |window, cx| window.click("open-settings", cx));
+    in_frame(cx, handle, |window, cx| {
+        window.within("settings").click("0-1", cx)
+    });
+    in_frame(cx, handle, |window, cx| {
+        // 输入框在标题下占据主要宽度，文件选择按钮位于同行末尾。
+        let field = window.find("local-shell").bounds();
+        let choose = window.find("browse-local-shell").bounds();
+        let page = window.find("settings").bounds();
+        assert!(
+            field.size.width > page.size.width / 2.,
+            "{field:?} in {page:?}"
+        );
+        assert!(field.right() <= choose.left() && choose.right() <= page.right());
+        assert_eq!(window.find("local-shell").value(), Some(""));
+        window.click("local-shell", cx);
+        window.input("/bin/bash -l ", cx);
+    });
+    let shell =
+        |cx: &mut TestAppContext| cx.update(|cx| settings.read(cx).settings().local_terminal.shell);
+    assert_eq!(shell(cx).as_deref(), Some("/bin/bash -l"));
+    in_frame(cx, handle, |window, _| {
+        // 末尾空格保留在输入框中，便于继续输入参数。
+        assert_eq!(window.find("local-shell").value(), Some("/bin/bash -l "));
+    });
+
+    // 已打开终端在重启后采用新设置，新建终端立即采用新设置。
+    in_frame(cx, handle, |window, cx| {
+        window.click(("local-terminal-tab", 1_u64), cx)
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.click(("restart-local-terminal-toolbar", 1_u64), cx)
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.click("new-local-terminal", cx)
+    });
+    let bash = LocalShell::new("/bin/bash -l");
+    assert_eq!(
+        local.shells(),
+        [LocalShell::default(), bash.clone(), bash.clone()]
+    );
+
+    // 从其他入口重置设置后，输入框应同步更新。
+    settings.update(cx, |store, cx| {
+        store.update(|settings| settings.local_terminal.shell = None, cx)
+    });
+    in_frame(cx, handle, |window, cx| window.click("open-settings", cx));
+    in_frame(cx, handle, |window, _| {
+        assert_eq!(window.find("local-shell").value(), Some(""));
+    });
+    in_frame(cx, handle, |window, cx| {
+        window.click("new-local-terminal", cx)
+    });
+    assert_eq!(local.shells().last(), Some(&LocalShell::default()));
 }
 
 #[gpui_kit::test]

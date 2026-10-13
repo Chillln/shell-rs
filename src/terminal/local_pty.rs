@@ -1,31 +1,46 @@
-use std::ffi::OsString;
 use std::io::{ErrorKind, Read, Write};
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::Duration;
 
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
 use async_channel::Sender;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{PtySize, native_pty_system};
 
 use crate::i18n::t;
 
 use super::{
-    TerminalSize, TerminalTransport, TerminalTransportCommand, TerminalTransportEvent,
-    TerminalTransportFactory, send_event,
+    LocalShell, LocalTerminalTransportProvider, SharedTerminalTransportFactory, TerminalSize,
+    TerminalTransport, TerminalTransportCommand, TerminalTransportEvent, TerminalTransportFactory,
+    send_event,
 };
 
+/// 为本机伪终端创建传输实例。
 #[derive(Default)]
-pub struct LocalPtyTransportFactory;
+pub struct LocalPtyTransportProvider;
+
+impl LocalTerminalTransportProvider for LocalPtyTransportProvider {
+    fn factory_for(&self, shell: &LocalShell) -> SharedTerminalTransportFactory {
+        Arc::new(LocalPtyTransportFactory {
+            shell: shell.clone(),
+        })
+    }
+}
+
+struct LocalPtyTransportFactory {
+    shell: LocalShell,
+}
 
 impl TerminalTransportFactory for LocalPtyTransportFactory {
     fn create(&self) -> Box<dyn TerminalTransport> {
-        Box::new(LocalPtyTransport { command: None })
+        Box::new(LocalPtyTransport {
+            shell: self.shell.clone(),
+        })
     }
 }
 
 struct LocalPtyTransport {
-    command: Option<Vec<OsString>>,
+    shell: LocalShell,
 }
 
 impl TerminalTransport for LocalPtyTransport {
@@ -40,18 +55,23 @@ impl TerminalTransport for LocalPtyTransport {
             .openpty(to_pty_size(initial_size))
             .context(t!("terminal.pty.open_failed"))?;
 
-        let mut command = self
-            .command
-            .map(CommandBuilder::from_argv)
-            .unwrap_or_else(CommandBuilder::new_default_prog);
+        let mut command = self.shell.command_builder()?;
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env("TERM_PROGRAM", "ShellRS");
 
-        let mut child = pair
-            .slave
-            .spawn_command(command)
-            .context(t!("terminal.pty.shell_failed"))?;
+        let mut child =
+            pair.slave
+                .spawn_command(command)
+                .map_err(|error| match self.shell.command() {
+                    // 启动失败时一并显示用户填写的程序和参数。
+                    Some(command) => anyhow!(t!(
+                        "terminal.pty.command_failed",
+                        command = command,
+                        error = format!("{error:#}")
+                    )),
+                    None => error.context(t!("terminal.pty.shell_failed")),
+                })?;
         drop(pair.slave);
 
         let mut reader = pair
@@ -159,10 +179,12 @@ mod tests {
 
     use super::*;
 
+    /// 通过设置所用的命令行格式启动 `/bin/sh -c script`。
     fn shell_transport(script: &str) -> Box<dyn TerminalTransport> {
-        Box::new(LocalPtyTransport {
-            command: Some(vec!["/bin/sh".into(), "-c".into(), script.into()]),
-        })
+        let command = format!("/bin/sh -c {}", crate::terminal::quote_word(script));
+        LocalPtyTransportProvider
+            .factory_for(&LocalShell::new(&command))
+            .create()
     }
 
     fn drain_until_exit(
@@ -224,6 +246,19 @@ mod tests {
         assert!(output.contains("size:31 100"));
         assert!(output.contains("got:hello"));
         worker.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn a_command_that_cannot_start_says_which() {
+        let (_commands, command_receiver) = mpsc::channel();
+        let (events, _event_receiver) = async_channel::unbounded();
+        let error = LocalPtyTransportProvider
+            .factory_for(&LocalShell::new("/no/such/shell -l"))
+            .create()
+            .run(TerminalSize::DEFAULT, command_receiver, events)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("无法启动 /no/such/shell -l"), "{error}");
     }
 
     #[test]

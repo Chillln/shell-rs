@@ -135,6 +135,37 @@ settings.notifications.bell_description:
   zh-CN: 终端就在当前标签时不提示。
   en: Not when the terminal is the current tab.
 
+# 终端 › 本地终端。
+settings.local_terminal.title:
+  zh-CN: 本地终端
+  en: Local terminal
+settings.local_terminal.shell:
+  zh-CN: Shell
+  en: Shell
+settings.local_terminal.shell_description:
+  zh-CN: 新开或重新启动的本地终端运行的程序：路径或命令，可以带参数。留空时自动检测系统默认的 shell。
+  en: "The program new and restarted local terminals run: a path or a command, with any arguments. Leave it empty to use the system’s default shell."
+# 空字段及菜单首项显示实际运行的默认 Shell。
+settings.local_terminal.automatic:
+  zh-CN: 自动检测（%{shell}）
+  en: Automatic (%{shell})
+# 尚未查明默认 Shell 时使用的文案。
+settings.local_terminal.automatic_unknown:
+  zh-CN: 自动检测
+  en: Automatic
+settings.local_terminal.installed:
+  zh-CN: 已安装的 shell
+  en: Installed shells
+settings.local_terminal.browse:
+  zh-CN: 选择文件…
+  en: Choose file…
+settings.local_terminal.browse_prompt:
+  zh-CN: 选择 shell
+  en: Choose a shell
+settings.local_terminal.keywords:
+  zh-CN: shell,本地终端,命令,参数,bash,zsh,fish,PowerShell,cmd
+  en: shell,local terminal,command,arguments,bash,zsh,fish,PowerShell,cmd
+
 settings.highlight.options:
   zh-CN: 常规
   en: Options

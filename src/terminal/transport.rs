@@ -1,5 +1,5 @@
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc,
 };
@@ -8,7 +8,7 @@ use std::time::Duration;
 use anyhow::Result;
 use async_channel::Sender;
 
-use super::TerminalSize;
+use super::{LocalShell, TerminalSize};
 use crate::connection::Latency;
 use crate::connection::{ConnectionPrompt, ConnectionPromptReply};
 use crate::host::{HostLogin, HostOs};
@@ -171,6 +171,46 @@ pub trait RemoteTerminalTransportProvider: Send + Sync + 'static {
 }
 
 pub type SharedRemoteTerminalTransportProvider = Arc<dyn RemoteTerminalTransportProvider>;
+
+/// 在本地终端新建或重启时按当前 Shell 创建传输工厂；工作区持有并可在 UI 测试中注入替身。
+pub trait LocalTerminalTransportProvider: Send + Sync + 'static {
+    fn factory_for(&self, shell: &LocalShell) -> SharedTerminalTransportFactory;
+}
+
+pub type SharedLocalTerminalTransportProvider = Arc<dyn LocalTerminalTransportProvider>;
+
+/// 测试用提供者：复用同一工厂并记录每次请求的 Shell。
+pub struct FixedLocalTerminalTransportProvider {
+    factory: SharedTerminalTransportFactory,
+    shells: Mutex<Vec<LocalShell>>,
+}
+
+impl FixedLocalTerminalTransportProvider {
+    pub fn new(factory: SharedTerminalTransportFactory) -> Self {
+        Self {
+            factory,
+            shells: Default::default(),
+        }
+    }
+
+    /// 按启动顺序返回请求过的 Shell。
+    pub fn shells(&self) -> Vec<LocalShell> {
+        self.shells
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+    }
+}
+
+impl LocalTerminalTransportProvider for FixedLocalTerminalTransportProvider {
+    fn factory_for(&self, shell: &LocalShell) -> SharedTerminalTransportFactory {
+        self.shells
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .push(shell.clone());
+        self.factory.clone()
+    }
+}
 
 /// Provider useful for tests and embedders that want every host to use the
 /// same factory.

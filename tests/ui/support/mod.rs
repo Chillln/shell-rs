@@ -41,10 +41,10 @@ pub use shellrs::sftp::{
     SftpTransport, SftpTransportProvider, TextFile, UploadRequest,
 };
 pub use shellrs::terminal::{
-    FixedRemoteTerminalTransportProvider, LocalTerminalId, RemoteTerminalId,
-    RemoteTerminalTransportProvider, SharedTerminalTransportFactory, TerminalFont,
-    TerminalLifecycle, TerminalSize, TerminalTransport, TerminalTransportCommand,
-    TerminalTransportEvent, TerminalTransportFactory,
+    FixedLocalTerminalTransportProvider, FixedRemoteTerminalTransportProvider, LocalShell,
+    LocalTerminalId, RemoteTerminalId, RemoteTerminalTransportProvider,
+    SharedTerminalTransportFactory, TerminalFont, TerminalLifecycle, TerminalSize,
+    TerminalTransport, TerminalTransportCommand, TerminalTransportEvent, TerminalTransportFactory,
 };
 pub use shellrs::workspace::Workspace;
 pub use std::sync::atomic::{AtomicUsize, Ordering};
