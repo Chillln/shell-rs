@@ -3,7 +3,8 @@ use crate::app::{ExplorerAction, ExplorerCommand};
 use crate::i18n::{t, tn};
 use crate::sftp::TransferDirection;
 use gpui_kit::component::{
-    ActiveTheme as _, h_flex,
+    ActiveTheme as _, WindowExt as _, h_flex,
+    notification::Notification,
     table::{Column, ColumnSort, TableDelegate, TableState},
 };
 use gpui_kit::prelude::FluentBuilder as _;
@@ -15,6 +16,7 @@ use std::{
     rc::Rc,
 };
 
+use super::staged_upload::stage_external_paths;
 use super::{
     ClickMode, ExplorerId, FileEntry, FileIcon, FilePane, FileSizeFormat, PaneSide, Selection,
     child_path, format_changed, format_rights,
@@ -721,13 +723,43 @@ pub(super) fn accept_drops(
             .on_drop({
                 let (send, target) = (send.clone(), target.clone());
                 move |paths: &ExternalPaths, window, cx| {
-                    let (paths, target) = (paths.paths().to_vec(), target.clone());
-                    send(ExplorerCommand::UploadPaths { paths, target }, window, cx)
+                    if !enabled {
+                        return;
+                    }
+                    match stage_external_paths(paths.paths().to_vec()) {
+                        Ok((paths, staging)) => send(
+                            ExplorerCommand::UploadPaths {
+                                paths,
+                                target: target.clone(),
+                                staging,
+                            },
+                            window,
+                            cx,
+                        ),
+                        Err(error) => {
+                            window.push_notification(
+                                Notification::error(t!(
+                                    "explorer.upload.prepare_failed",
+                                    error = error
+                                )),
+                                cx,
+                            );
+                            cx.stop_propagation();
+                        }
+                    }
                 }
             })
             .on_drop(move |drag: &LocalFilesDrag, window, cx| {
                 let (paths, target) = (drag.paths.clone(), target.clone());
-                send(ExplorerCommand::UploadPaths { paths, target }, window, cx)
+                send(
+                    ExplorerCommand::UploadPaths {
+                        paths,
+                        target,
+                        staging: None,
+                    },
+                    window,
+                    cx,
+                )
             }),
         PaneSide::Local => element.on_drop(move |drag: &RemoteFilesDrag, window, cx| {
             let (paths, target) = (drag.paths.clone(), target.clone());

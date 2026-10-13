@@ -18,6 +18,7 @@ mod preview;
 mod properties_dialog;
 mod queue_panel;
 mod selection;
+mod staged_upload;
 mod transfer_queue;
 
 pub use explorer_panel::{ExplorerPanel, ExplorerPanelEvent, ExplorerStatus};
@@ -31,6 +32,7 @@ pub use model::*;
 pub use pane_operations::PaneOperation;
 pub use preview::{IMAGE_LIMIT, PreviewKind};
 pub use selection::{ClickMode, CursorMotion, Selection};
+pub use staged_upload::StagingLease;
 pub use transfer_queue::{
     QueueEntry, QueueId, QueueState, Removal, TransferJob, TransferQueue, percent,
 };

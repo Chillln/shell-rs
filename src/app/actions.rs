@@ -649,6 +649,7 @@ pub enum ExplorerCommand {
     UploadPaths {
         paths: Vec<std::path::PathBuf>,
         target: String,
+        staging: Option<crate::explorer::StagingLease>,
     },
     Answer {
         request_id: u64,

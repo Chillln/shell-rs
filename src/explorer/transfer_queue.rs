@@ -5,6 +5,8 @@
 
 use std::{collections::HashSet, path::PathBuf};
 
+use super::StagingLease;
+
 use crate::i18n::{t, tn};
 use crate::sftp::{TransferDirection, TransferPhase, TransferProgress};
 
@@ -25,8 +27,16 @@ pub struct QueueId(pub u64);
 /// What a batch copies, as the user confirmed it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TransferJob {
-    Upload { paths: Vec<PathBuf>, target: String },
-    Download { paths: Vec<String>, target: String },
+    Upload {
+        paths: Vec<PathBuf>,
+        target: String,
+        display_paths: Option<Vec<PathBuf>>,
+        staging: Option<StagingLease>,
+    },
+    Download {
+        paths: Vec<String>,
+        target: String,
+    },
 }
 
 impl TransferJob {
@@ -41,7 +51,13 @@ impl TransferJob {
     /// 多个位置.
     pub fn source_label(&self) -> String {
         let (paths, folders): (Vec<String>, Vec<String>) = match self {
-            TransferJob::Upload { paths, .. } => paths
+            TransferJob::Upload {
+                paths,
+                display_paths,
+                ..
+            } => display_paths
+                .as_deref()
+                .unwrap_or(paths)
                 .iter()
                 .map(|path| {
                     (
@@ -240,6 +256,11 @@ impl TransferQueue {
     /// with no head, such as the empty one after 丢弃续传进度, is dropped.
     pub fn on_progress(&mut self, progress: TransferProgress) {
         if let Some(entry) = self.head_mut() {
+            if progress.phase() == TransferPhase::Completed
+                && let TransferJob::Upload { staging, .. } = &mut entry.job
+            {
+                staging.take();
+            }
             entry.progress = Some(progress);
         }
     }
@@ -248,6 +269,9 @@ impl TransferQueue {
     /// progress is being discarded.
     pub fn abandon_head(&mut self, why: Removal) {
         if let Some(entry) = self.head_mut() {
+            if let TransferJob::Upload { staging, .. } = &mut entry.job {
+                staging.take();
+            }
             entry.removed = Some(why);
         }
     }
@@ -277,6 +301,9 @@ impl TransferQueue {
         match self.entries[index].state() {
             QueueState::Active => false,
             QueueState::Stopped => {
+                if let TransferJob::Upload { staging, .. } = &mut self.entries[index].job {
+                    staging.take();
+                }
                 self.entries[index].removed = Some(Removal::TakenOff);
                 true
             }
@@ -345,15 +372,18 @@ impl TransferQueue {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{fs, path::PathBuf};
 
     use super::{QueueId, QueueState, Removal, TransferJob, TransferQueue};
+    use crate::explorer::staged_upload::stage_external_paths;
     use crate::sftp::{TransferDetail, TransferPhase, TransferProgress};
 
     fn upload(name: &str) -> TransferJob {
         TransferJob::Upload {
             paths: vec![PathBuf::from(format!("/local/{name}"))],
             target: "/srv".into(),
+            display_paths: None,
+            staging: None,
         }
     }
 
@@ -363,6 +393,31 @@ mod tests {
 
     fn report(queue: &mut TransferQueue, phase: TransferPhase) {
         queue.on_progress(TransferProgress::new(phase));
+    }
+
+    #[test]
+    fn completed_upload_releases_temporary_drop_but_keeps_original_label() {
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("压缩包文件.txt");
+        fs::write(&source, "内容").unwrap();
+        let (paths, staging) = stage_external_paths(vec![source.clone()]).unwrap();
+        let staged_path = paths[0].clone();
+        let mut queue = TransferQueue::default();
+        queue.push(TransferJob::Upload {
+            paths,
+            target: "/srv".into(),
+            display_paths: Some(vec![source.clone()]),
+            staging,
+        });
+        fs::remove_file(&source).unwrap();
+        queue.start_next();
+        assert_eq!(fs::read_to_string(&staged_path).unwrap(), "内容");
+        report(&mut queue, TransferPhase::Completed);
+        assert!(!staged_path.exists());
+        assert_eq!(
+            queue.entries()[0].job().source_label(),
+            source.display().to_string()
+        );
     }
 
     #[test]
@@ -471,6 +526,8 @@ mod tests {
         let upload = |paths: &[&str]| TransferJob::Upload {
             paths: paths.iter().map(PathBuf::from).collect(),
             target: "/srv".into(),
+            display_paths: None,
+            staging: None,
         };
         assert_eq!(upload(&["/data/a.zip"]).source_label(), "/data/a.zip");
         assert_eq!(upload(&["/data/a.zip", "/data/b"]).source_label(), "/data");

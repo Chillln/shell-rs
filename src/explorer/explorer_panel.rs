@@ -767,7 +767,7 @@ impl ExplorerPanel {
             ExplorerCommand::Transfer { remote: false } => {
                 let paths = self.local.read(cx).upload_sources(cx);
                 let target = self.remote.read(cx).path();
-                self.open_upload(paths, target, window, cx);
+                self.open_upload(paths, target, None, window, cx);
             }
             ExplorerCommand::Transfer { remote: true } => {
                 let remote = self.remote.read(cx);
@@ -808,7 +808,11 @@ impl ExplorerPanel {
                             this.dispatch.dispatch_explorer_action(
                                 &ExplorerAction::new(
                                     this.id,
-                                    ExplorerCommand::UploadPaths { paths, target },
+                                    ExplorerCommand::UploadPaths {
+                                        paths,
+                                        target,
+                                        staging: None,
+                                    },
                                 ),
                                 window,
                                 cx,
@@ -818,9 +822,11 @@ impl ExplorerPanel {
                 })
                 .detach();
             }
-            ExplorerCommand::UploadPaths { paths, target } => {
-                self.open_upload(paths.clone(), target.clone(), window, cx)
-            }
+            ExplorerCommand::UploadPaths {
+                paths,
+                target,
+                staging,
+            } => self.open_upload(paths.clone(), target.clone(), staging.clone(), window, cx),
             ExplorerCommand::Answer { request_id, answer } => {
                 if self
                     .question
@@ -1181,7 +1187,7 @@ impl Render for ExplorerPanel {
 /// The engine's command for a queued batch; fails for paths it cannot take.
 fn transfer_command(job: &TransferJob) -> anyhow::Result<SftpCommand> {
     match job {
-        TransferJob::Upload { paths, target } => RemotePath::new(target.clone())
+        TransferJob::Upload { paths, target, .. } => RemotePath::new(target.clone())
             .and_then(|target| UploadRequest::new(paths.clone(), target))
             .map(SftpCommand::Upload),
         TransferJob::Download { paths, target } => paths

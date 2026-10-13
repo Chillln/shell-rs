@@ -175,6 +175,7 @@ async fn sftp_transfers_wait_their_turn_in_the_queue(cx: &mut TestAppContext) {
                     ExplorerCommand::UploadPaths {
                         paths,
                         target: "/home/tester".into(),
+                        staging: None,
                     },
                 )),
                 cx,
@@ -357,6 +358,59 @@ async fn sftp_native_picker_and_external_drop_share_confirmation(cx: &mut TestAp
         );
     })
     .unwrap();
+}
+
+#[gpui_kit::test]
+async fn sftp_archive_drop_keeps_temporary_file_until_transfer_finishes(cx: &mut TestAppContext) {
+    use shellrs::sftp::{TransferPhase, TransferProgress};
+    let provider = Arc::new(FakeSftpProvider::default());
+    let (handle, _) = open_workspace_with_sftp(cx, provider.clone());
+    open_test_explorer(cx, handle).await;
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("压缩包文件.txt");
+    std::fs::write(&source, "内容").unwrap();
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        let position = window
+            .within(("remote-pane", SFTP_TAB))
+            .find("file:目录")
+            .bounds()
+            .center();
+        let paths = gpui_kit::ExternalPaths(vec![source.clone()].into());
+        window.dispatch_event(
+            gpui_kit::FileDropEvent::Entered { position, paths }.to_platform_input(),
+            cx,
+        );
+        window.dispatch_event(
+            gpui_kit::FileDropEvent::Submit { position }.to_platform_input(),
+            cx,
+        );
+    })
+    .unwrap();
+    std::fs::remove_file(&source).unwrap();
+    cx.run_until_parked();
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert!(window.find("upload-confirm").visible());
+        window.click("upload-confirm", cx);
+    })
+    .unwrap();
+    wait_for_head_status(cx, handle, "正在扫描").await;
+    let staged = provider.requests.lock().unwrap()[0].sources()[0].clone();
+    assert_eq!(std::fs::read_to_string(&staged).unwrap(), "内容");
+    provider.events.lock().unwrap()[0]
+        .send_blocking(SftpEvent::Progress(TransferProgress::new(
+            TransferPhase::Completed,
+        )))
+        .unwrap();
+    cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
+        window.render_frame(cx);
+        window
+            .try_find(("queue-entry", 1u64))
+            .is_some_and(|row| row.label() == Some("已完成"))
+    })
+    .await;
+    assert!(!staged.exists());
 }
 
 #[gpui_kit::test]

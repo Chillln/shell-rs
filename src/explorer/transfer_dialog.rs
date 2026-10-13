@@ -1,4 +1,4 @@
-use super::{ExplorerId, ExplorerPanel, FileIcon, FileIconKind, TransferJob};
+use super::{ExplorerId, ExplorerPanel, FileIcon, FileIconKind, StagingLease, TransferJob};
 use crate::app::ExplorerDispatch as _;
 use crate::{
     app::{ExplorerAction, ExplorerCommand},
@@ -33,20 +33,29 @@ impl ExplorerPanel {
         &mut self,
         paths: Vec<PathBuf>,
         target: String,
+        staging: Option<StagingLease>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         if paths.is_empty() || !self.can_confirm_transfer(window, cx) {
             return;
         }
+        let display_paths = staging
+            .as_ref()
+            .map_or(paths.as_slice(), StagingLease::originals);
         let sources = self.transfer_sources(
             false,
-            paths.iter().map(|path| path.to_string_lossy().into_owned()),
+            display_paths
+                .iter()
+                .map(|path| path.to_string_lossy().into_owned()),
             cx,
         );
+        let display_paths = staging.as_ref().map(|lease| lease.originals().to_vec());
         let job = move |target| TransferJob::Upload {
             paths: paths.clone(),
             target,
+            display_paths: display_paths.clone(),
+            staging: staging.clone(),
         };
         self.open_transfer(TransferDirection::Upload, sources, target, job, window, cx);
     }
