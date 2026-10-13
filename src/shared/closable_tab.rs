@@ -5,11 +5,13 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants as _},
     h_flex,
     menu::{ContextMenuExt as _, PopupMenu},
+    tooltip::Tooltip,
 };
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::*;
 
 use crate::app::ToggleHostPanel;
+use crate::host::ConnectionState;
 use crate::i18n::t;
 
 type MenuBuilder = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
@@ -37,6 +39,7 @@ pub struct ClosableTabTitle {
     close: Option<(ElementId, Box<dyn Action>)>,
     menu: Option<MenuBuilder>,
     modified: bool,
+    connection_state: Option<ConnectionState>,
 }
 
 impl ClosableTabTitle {
@@ -54,7 +57,15 @@ impl ClosableTabTitle {
             close: None,
             menu: None,
             modified: false,
+            connection_state: None,
         }
+    }
+
+    /// 显示当前标签自身的连接状态。只有连接中或已断开时才显示状态点。
+    /// 不拥有远程连接的标签不设置此状态。
+    pub fn connection_state(mut self, state: ConnectionState) -> Self {
+        self.connection_state = Some(state);
+        self
     }
 
     /// Mark the tab as holding changes not saved yet: a dot after the label,
@@ -83,10 +94,45 @@ impl ClosableTabTitle {
 
 impl RenderOnce for ClosableTabTitle {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        // 状态点不能改变主机标记的布局尺寸或基线；将它置于圆形标记的右下角。
+        let status = self.connection_state.and_then(|state| match state {
+            ConnectionState::Connected => None,
+            ConnectionState::Connecting => Some((state, cx.theme().warning)),
+            ConnectionState::Disconnected => Some((state, cx.theme().danger)),
+        });
+        let leading = match status {
+            Some((state, color)) => {
+                let label = state.label();
+                div()
+                    .relative()
+                    .flex_shrink_0()
+                    .child(self.leading)
+                    .child(
+                        div()
+                            .id("connection-status")
+                            .test_support()
+                            .role(Role::Status)
+                            .aria_label(label.clone())
+                            .absolute()
+                            // 偏移半个状态点直径，使圆点中心落在标记的角上。
+                            .right(-rems(0.1875))
+                            .bottom(-rems(0.1875))
+                            .size_1p5()
+                            .flex_shrink_0()
+                            .rounded_full()
+                            .bg(color)
+                            .tooltip(move |window, cx| {
+                                Tooltip::new(label.clone()).build(window, cx)
+                            }),
+                    )
+                    .into_any_element()
+            }
+            None => self.leading,
+        };
         let row = h_flex()
             .id("title")
             .gap_1()
-            .child(self.leading)
+            .child(leading)
             .child(self.label.clone())
             .when(self.modified, |row| {
                 row.child(

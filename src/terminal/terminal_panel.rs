@@ -13,7 +13,7 @@ use crate::app::{
     EditHost, OpenExplorer, OpenTerminalDirectory, ReconnectTerminal, RenameTerminal,
 };
 use crate::connection::{ConnectionPrompt, ConnectionPromptReply};
-use crate::host::{HostId, HostOs, HostStore};
+use crate::host::{ConnectionState, HostId, HostOs, HostStore};
 use crate::i18n::t;
 use crate::shared::{ClosableTabTitle, HostMark, LatencyLabel, RenamableTab, close_tab_items};
 
@@ -93,6 +93,7 @@ impl TerminalPanel {
                 cx,
             );
             terminal.set_menu_items(connection_menu_items(id, host_id));
+            terminal.set_reconnect_action(ReconnectTerminal(id), cx);
             terminal
         });
         let subscriptions = vec![
@@ -272,7 +273,15 @@ impl Panel for TerminalPanel {
             .and_then(|host| host.os);
         let mark = HostMark::new(("terminal-tab-os", id.0), self.default_title(cx), os).small();
         let tab_menu = self.tab_menu(cx);
+        let state = match self.lifecycle(cx) {
+            TerminalLifecycle::Starting => ConnectionState::Connecting,
+            TerminalLifecycle::Running => ConnectionState::Connected,
+            TerminalLifecycle::Exited { .. }
+            | TerminalLifecycle::Failed(_)
+            | TerminalLifecycle::Closing => ConnectionState::Disconnected,
+        };
         ClosableTabTitle::new(("terminal-tab", id.0), mark, self.tab_title(cx))
+            .connection_state(state)
             .closable(("close-terminal", id.0), Box::new(CloseTerminal(id)))
             .context_menu(move |menu, _, cx| tab_menu.build(menu, cx))
     }
@@ -291,6 +300,7 @@ impl Panel for TerminalPanel {
     fn toolbar_buttons(&mut self, _: &mut Window, cx: &mut Context<Self>) -> Option<Vec<Button>> {
         let host_id = self.host_id;
         let terminal_id = self.id;
+        let reconnect_dispatch = self.focus_handle(cx);
         let mut buttons = vec![
             Button::new(("sftp", terminal_id.0))
                 .icon(Icon::new(CatalogIcon::FolderTree))
@@ -303,7 +313,7 @@ impl Panel for TerminalPanel {
                 .icon(Icon::new(CatalogIcon::RefreshCw))
                 .tooltip(t!("terminal.remote.reconnect"))
                 .on_click(move |_, window, cx| {
-                    window.dispatch_action(Box::new(ReconnectTerminal(terminal_id)), cx)
+                    reconnect_dispatch.dispatch_action(&ReconnectTerminal(terminal_id), window, cx)
                 }),
         ];
         if self.host_filesystem {

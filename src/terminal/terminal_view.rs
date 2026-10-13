@@ -66,6 +66,17 @@ fn opens_links(modifiers: &Modifiers) -> bool {
     }
 }
 
+fn reconnect_keystroke(event: &KeyDownEvent, lifecycle: &TerminalLifecycle) -> bool {
+    event.keystroke.key == "enter"
+        && event.keystroke.modifiers == Modifiers::default()
+        && !event.is_held
+        && !event.prefer_character_input
+        && matches!(
+            lifecycle,
+            TerminalLifecycle::Exited { .. } | TerminalLifecycle::Failed(_)
+        )
+}
+
 /// What a terminal is called for screen readers. Asked for each time it is
 /// drawn, so it follows the interface language.
 type TerminalLabel = Rc<dyn Fn(&App) -> SharedString>;
@@ -215,6 +226,8 @@ pub struct TerminalView {
     context_menu: Option<(Entity<PopupMenu>, gpui_kit::Point<Pixels>)>,
     context_menu_subscription: Option<Subscription>,
     menu_items: Option<TerminalMenuItems>,
+    reconnect_action: Option<Box<dyn Action>>,
+    reconnect_pending: bool,
     find: Option<FindBar>,
     cursor_visible: bool,
     focused: bool,
@@ -308,6 +321,8 @@ impl TerminalView {
             context_menu: None,
             context_menu_subscription: None,
             menu_items: None,
+            reconnect_action: None,
+            reconnect_pending: false,
             find: None,
             cursor_visible: true,
             focused: false,
@@ -329,6 +344,13 @@ impl TerminalView {
 
     pub fn focus_handle(&self) -> FocusHandle {
         self.focus_handle.clone()
+    }
+
+    /// 仅远程终端设置此动作，每个标签使用自己的重连命令。
+    pub(super) fn set_reconnect_action(&mut self, action: impl Action, cx: &mut Context<Self>) {
+        self.reconnect_action = Some(Box::new(action));
+        self.engine
+            .update(cx, |engine, _| engine.enable_reconnect_on_enter());
     }
 
     pub fn restart(&mut self, cx: &mut Context<Self>) {
@@ -355,6 +377,7 @@ impl TerminalView {
     fn reset_interaction(&mut self) {
         self.prediction_reading = None;
         self.prediction_read_at = None;
+        self.reconnect_pending = false;
         self.marked_text.clear();
         self.marked_selection = 0..0;
         self.ime_cursor_bounds = None;
@@ -629,6 +652,17 @@ impl TerminalView {
     }
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.focus_handle.is_focused(window)
+            && !self.reconnect_pending
+            && reconnect_keystroke(event, &self.lifecycle(cx))
+            && let Some(action) = &self.reconnect_action
+        {
+            // 动作稍后派发；先锁定，避免连续按键在连接状态更新前重复重连。
+            self.reconnect_pending = true;
+            window.dispatch_action(action.boxed_clone(), cx);
+            cx.stop_propagation();
+            return;
+        }
         if event.keystroke.key == "right"
             && !event.keystroke.modifiers.modified()
             && let Some(suffix) = self.prediction(cx)
@@ -2224,6 +2258,42 @@ mod tests {
 
     fn key(source: &str) -> Keystroke {
         Keystroke::parse(source).unwrap()
+    }
+
+    #[test]
+    fn reconnect_enter_requires_a_fresh_plain_key_and_stopped_lifecycle() {
+        let stopped = super::TerminalLifecycle::Exited {
+            code: 0,
+            signal: None,
+        };
+        let event = gpui_kit::KeyDownEvent {
+            keystroke: key("enter"),
+            is_held: false,
+            prefer_character_input: false,
+        };
+        assert!(super::reconnect_keystroke(&event, &stopped));
+        assert!(super::reconnect_keystroke(
+            &event,
+            &super::TerminalLifecycle::Failed("offline".into())
+        ));
+        for state in [
+            super::TerminalLifecycle::Starting,
+            super::TerminalLifecycle::Running,
+            super::TerminalLifecycle::Closing,
+        ] {
+            assert!(!super::reconnect_keystroke(&event, &state));
+        }
+        for name in ["shift-enter", "ctrl-enter", "alt-enter", "cmd-enter", "a"] {
+            let mut modified = event.clone();
+            modified.keystroke = key(name);
+            assert!(!super::reconnect_keystroke(&modified, &stopped));
+        }
+        let mut held = event.clone();
+        held.is_held = true;
+        assert!(!super::reconnect_keystroke(&held, &stopped));
+        let mut character_input = event;
+        character_input.prefer_character_input = true;
+        assert!(!super::reconnect_keystroke(&character_input, &stopped));
     }
 
     #[test]
