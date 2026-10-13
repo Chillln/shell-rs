@@ -12,7 +12,7 @@ On macOS, the close button at the top left of the window only hides ShellRS: ope
 
 ## Hosts
 
-Each item saved in the left sidebar is a host: an address, a port and a way to authenticate. To log in to the same machine as different users, save it as two hosts.
+Each item saved in the left sidebar is a host: an address, a port and a way to authenticate. To log in to the same machine as different users, save it as two hosts. A name is optional; leaving it empty uses the address.
 
 The host dialog’s “Authentication” has three options:
 
