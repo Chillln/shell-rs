@@ -2236,70 +2236,173 @@ mod tests {
         assert_eq!(asked, 1);
     }
 
+    /// 模拟连接已保存密钥与服务器密钥不一致，并停在确认提示处。
+    struct ChangedKey {
+        server: RunningTestServer,
+        known_hosts: std::path::PathBuf,
+        stale: String,
+        prompt: crate::connection::ConnectionPrompt,
+        commands: mpsc::Sender<TerminalTransportCommand>,
+        events: async_channel::Receiver<TerminalTransportEvent>,
+        done: mpsc::Receiver<anyhow::Result<()>>,
+        worker: thread::JoinHandle<()>,
+        _directory: tempfile::TempDir,
+    }
+
+    impl ChangedKey {
+        fn connect() -> Option<Self> {
+            let Some(server) = start_server(TestAuth::Password) else {
+                eprintln!(
+                    "loopback sockets are unavailable in this sandbox; skipping integration body"
+                );
+                return None;
+            };
+            let directory = tempfile::tempdir().unwrap();
+            let known_hosts = directory.path().join("known_hosts");
+            let mut rng = russh::keys::key::safe_rng();
+            let stale_key =
+                russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519).unwrap();
+            learn_known_hosts_path(
+                "127.0.0.1",
+                server.port,
+                stale_key.public_key(),
+                &known_hosts,
+            )
+            .unwrap();
+            let stale = stale_key
+                .public_key()
+                .fingerprint(russh::keys::HashAlg::Sha256)
+                .to_string();
+            let host = password_host(server.port);
+            let provider = SshTerminalTransportProvider::with_connector(SshConnector::new(
+                &known_hosts,
+                Arc::new(NoSecretStore),
+            ));
+            let factory = provider.factory_for(&HostLogin::of(&host, None));
+            let (commands, command_rx) = mpsc::channel();
+            let (event_tx, events) = async_channel::unbounded();
+            let (done_tx, done) = mpsc::channel();
+            let worker = thread::spawn(move || {
+                done_tx
+                    .send(
+                        factory
+                            .create()
+                            .run(TerminalSize::DEFAULT, command_rx, event_tx),
+                    )
+                    .unwrap();
+            });
+            let prompt = match events.recv_blocking().unwrap() {
+                TerminalTransportEvent::Prompt(prompt) => prompt,
+                event => panic!("unexpected event: {event:?}"),
+            };
+            Some(Self {
+                server,
+                known_hosts,
+                stale,
+                prompt,
+                commands,
+                events,
+                done,
+                worker,
+                _directory: directory,
+            })
+        }
+
+        fn answer(&self, reply: ConnectionPromptReply) {
+            self.commands
+                .send(TerminalTransportCommand::PromptReply {
+                    request_id: self.prompt.request_id(),
+                    reply,
+                })
+                .unwrap();
+        }
+
+        /// 返回当前保存的服务器密钥指纹。
+        fn saved(&self) -> Vec<String> {
+            russh::keys::known_hosts::known_host_keys_path(
+                "127.0.0.1",
+                self.server.port,
+                &self.known_hosts,
+            )
+            .unwrap()
+            .into_iter()
+            .map(|(_, key)| key.fingerprint(russh::keys::HashAlg::Sha256).to_string())
+            .collect()
+        }
+    }
+
     #[test]
-    fn changed_host_key_is_reported_and_blocked() {
-        let Some(server) = start_server(TestAuth::Password) else {
-            eprintln!(
-                "loopback sockets are unavailable in this sandbox; skipping integration body"
-            );
+    fn a_changed_host_key_is_asked_about_and_declining_blocks_it() {
+        let Some(changed) = ChangedKey::connect() else {
             return;
         };
-        let directory = tempfile::tempdir().unwrap();
-        let known_hosts = directory.path().join("known_hosts");
-        let mut rng = russh::keys::key::safe_rng();
-        let stale_key =
-            russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519).unwrap();
-        learn_known_hosts_path(
-            "127.0.0.1",
-            server.port,
-            stale_key.public_key(),
-            &known_hosts,
-        )
-        .unwrap();
-        let host = password_host(server.port);
-        let provider = SshTerminalTransportProvider::with_connector(SshConnector::new(
-            &known_hosts,
-            Arc::new(NoSecretStore),
-        ));
-        let factory = provider.factory_for(&HostLogin::of(&host, None));
-        let (_command_tx, command_rx) = mpsc::channel();
-        let (event_tx, event_rx) = async_channel::unbounded();
-        let (done_tx, done_rx) = mpsc::channel();
-        let worker = thread::spawn(move || {
-            done_tx
-                .send(
-                    factory
-                        .create()
-                        .run(TerminalSize::DEFAULT, command_rx, event_tx),
-                )
-                .unwrap();
-        });
-
-        let deadline = std::time::Instant::now() + Duration::from_secs(3);
-        let changed = loop {
-            match event_rx.try_recv() {
-                Ok(TerminalTransportEvent::Prompt(prompt)) => match prompt.kind() {
-                    ConnectionPromptKind::HostKeyChanged(changed) => break changed.clone(),
-                    other => panic!("unexpected prompt: {other:?}"),
-                },
-                Ok(event) => panic!("unexpected event: {event:?}"),
-                Err(async_channel::TryRecvError::Empty) if std::time::Instant::now() < deadline => {
-                    thread::sleep(Duration::from_millis(5));
-                }
-                Err(error) => panic!("host-key prompt was not emitted: {error}"),
-            }
+        let ConnectionPromptKind::HostKeyChanged(question) = changed.prompt.kind().clone() else {
+            panic!("unexpected prompt: {:?}", changed.prompt.kind());
         };
-        assert_eq!(changed.host(), "127.0.0.1");
-        assert_eq!(changed.port(), server.port);
-        assert_eq!(changed.known_hosts_path(), known_hosts);
-        assert_eq!(changed.old_fingerprints().len(), 1);
-        assert_ne!(changed.old_fingerprints()[0], changed.fingerprint());
+        assert_eq!(question.host(), "127.0.0.1");
+        assert_eq!(question.port(), changed.server.port);
+        assert_eq!(
+            question.old_fingerprints(),
+            std::slice::from_ref(&changed.stale)
+        );
+        assert_ne!(question.fingerprint(), changed.stale);
+
+        changed.answer(ConnectionPromptReply::Cancel);
         assert!(
-            done_rx
+            changed
+                .done
                 .recv_timeout(Duration::from_secs(3))
                 .expect("mismatched host connection did not stop")
                 .is_err()
         );
-        worker.join().unwrap();
+        assert_eq!(changed.saved(), std::slice::from_ref(&changed.stale));
+        changed.worker.join().unwrap();
+    }
+
+    #[test]
+    fn updating_a_changed_host_key_replaces_the_saved_one_and_logs_in() {
+        let Some(changed) = ChangedKey::connect() else {
+            return;
+        };
+        let ConnectionPromptKind::HostKeyChanged(question) = changed.prompt.kind().clone() else {
+            panic!("unexpected prompt: {:?}", changed.prompt.kind());
+        };
+        changed.answer(ConnectionPromptReply::TrustAndSave);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the login did not go on"
+            );
+            match changed.events.recv_blocking().unwrap() {
+                TerminalTransportEvent::Prompt(prompt) => match prompt.kind() {
+                    ConnectionPromptKind::Authentication(_) => changed
+                        .commands
+                        .send(TerminalTransportCommand::PromptReply {
+                            request_id: prompt.request_id(),
+                            reply: ConnectionPromptReply::Answers(vec![ConnectionSecret::new(
+                                TEST_PASSWORD,
+                            )]),
+                        })
+                        .unwrap(),
+                    other => panic!("unexpected prompt: {other:?}"),
+                },
+                TerminalTransportEvent::Started => break,
+                TerminalTransportEvent::Failed(error) => panic!("SSH failed: {error}"),
+                _ => {}
+            }
+        }
+        // 旧密钥已移除，服务器的新密钥已保存。
+        assert_eq!(changed.saved(), [question.fingerprint().to_string()]);
+        changed
+            .commands
+            .send(TerminalTransportCommand::Shutdown)
+            .unwrap();
+        changed
+            .done
+            .recv_timeout(Duration::from_secs(3))
+            .expect("the terminal did not stop")
+            .unwrap();
+        changed.worker.join().unwrap();
     }
 }

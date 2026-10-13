@@ -7,6 +7,7 @@ use crate::support::*;
 enum PromptBehavior {
     Authentication,
     UnknownHost,
+    HostKeyChanged,
 }
 
 struct PromptTerminalFactory {
@@ -61,6 +62,13 @@ impl TerminalTransport for PromptTerminalTransport {
                 "ssh-ed25519",
                 "SHA256:test-fingerprint",
             ),
+            PromptBehavior::HostKeyChanged => ConnectionPromptKind::host_key_changed(
+                "example.test",
+                22,
+                "ssh-ed25519",
+                vec!["SHA256:old-fingerprint".into()],
+                "SHA256:new-fingerprint",
+            ),
         };
         events.send_blocking(TerminalTransportEvent::Prompt(ConnectionPrompt::new(
             request_id, kind,
@@ -72,7 +80,10 @@ impl TerminalTransport for PromptTerminalTransport {
                     reply,
                 } if reply_id == request_id => match reply {
                     ConnectionPromptReply::TrustAndSave
-                        if matches!(self.behavior, PromptBehavior::UnknownHost) =>
+                        if matches!(
+                            self.behavior,
+                            PromptBehavior::UnknownHost | PromptBehavior::HostKeyChanged
+                        ) =>
                     {
                         self.accepted.fetch_add(1, Ordering::SeqCst);
                         break;
@@ -169,6 +180,41 @@ async fn authentication_prompt_is_masked_and_drives_connected_state(cx: &mut Tes
             .state
             .is_connected()
     }));
+}
+
+#[gpui_kit::test]
+async fn a_changed_host_key_is_updated_from_its_question(cx: &mut TestAppContext) {
+    let (store, id) = one_host_store(AuthKind::Password);
+    let factory = Arc::new(PromptTerminalFactory::new(PromptBehavior::HostKeyChanged));
+    let (handle, _) = open_workspace_with_remote_factory(cx, store, factory.clone());
+
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        window
+            .within("host-tree")
+            .double_click(("host-row", id.0), cx);
+    })
+    .unwrap();
+    cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
+        window.render_frame(cx);
+        window.try_find("ok").is_some()
+    })
+    .await;
+    // 对话框允许保留旧密钥或更新密钥后继续连接。
+    cx.update_window(handle.into(), |_, window, cx| {
+        window.render_frame(cx);
+        assert_eq!(window.find("ok").label(), Some("更新并连接"));
+        assert!(window.try_find("cancel").is_some());
+        window.click("ok", cx);
+    })
+    .unwrap();
+    cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
+        window.render_frame(cx);
+        window.find("status-connection").label() == Some("已连接 prompt-host")
+    })
+    .await;
+    assert_eq!(factory.accepted.load(Ordering::SeqCst), 1);
+    assert_eq!(factory.canceled.load(Ordering::SeqCst), 0);
 }
 
 #[gpui_kit::test]

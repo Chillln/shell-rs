@@ -122,9 +122,10 @@ impl SshConnectionTester {
                     });
                     true
                 }
+                // 测试连接无法由用户确认，立即拒绝并返回密钥变更原因。
                 ConnectionPromptKind::HostKeyChanged(_) => {
                     lock(&host_trust).key_changed = true;
-                    true
+                    false
                 }
                 // Credential questions never get here: the broker is
                 // non-interactive and fails with a `MissingCredential`.
