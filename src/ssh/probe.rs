@@ -10,9 +10,9 @@ use crate::host::HostOs;
 /// such file, and because a Windows shell will fail both halves.
 pub const PROBE_COMMAND: &str = "uname -s; cat /etc/os-release 2>/dev/null";
 
-/// The follow-up when the POSIX probe says nothing at all. Works from
-/// `cmd.exe` and from PowerShell, which is the pair OpenSSH for Windows uses.
-pub const WINDOWS_PROBE_COMMAND: &str = "cmd /c ver";
+/// Windows OpenSSH 会将 exec 命令包在 `cmd.exe /c "..."` 中；显式写出扩展名
+/// 可避免外层引号被当作 `ver` 的一部分，`/d` 则禁止执行 AutoRun。
+pub const WINDOWS_PROBE_COMMAND: &str = "cmd.exe /d /c ver";
 
 /// Read the POSIX probe. `None` means the output was not recognizable, which
 /// is the signal to try [`WINDOWS_PROBE_COMMAND`].
@@ -35,7 +35,24 @@ pub fn parse_probe(output: &str) -> Option<HostOs> {
 
 /// Read the Windows follow-up.
 pub fn parse_windows_probe(output: &str) -> Option<HostOs> {
-    output.contains("Windows").then_some(HostOs::Windows)
+    output
+        .lines()
+        .any(|line| {
+            let Some(version) = line
+                .trim()
+                .strip_prefix("Microsoft Windows [")
+                .and_then(|line| line.strip_suffix(']'))
+                .and_then(|line| line.split_whitespace().last())
+            else {
+                return false;
+            };
+            // 版本标签会随系统语言变化，末尾的数字版本号不会。
+            version.contains('.')
+                && version
+                    .split('.')
+                    .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        })
+        .then_some(HostOs::Windows)
 }
 
 /// Pick the distribution out of `/etc/os-release`.
@@ -227,6 +244,64 @@ mod tests {
             Some(HostOs::Windows)
         );
         assert_eq!(parse_windows_probe(""), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_probe_works_inside_the_openssh_cmd_wrapper() {
+        use std::os::windows::process::CommandExt as _;
+
+        // 模拟 Windows OpenSSH 对非 PTY exec 请求添加的外层命令包装。
+        let output = std::process::Command::new("cmd.exe")
+            .raw_arg(format!("/d /c \"{}\"", super::WINDOWS_PROBE_COMMAND))
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            parse_windows_probe(&String::from_utf8_lossy(&output.stdout)),
+            Some(HostOs::Windows)
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_probe_works_from_powershell_without_a_profile() {
+        let output = std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                super::WINDOWS_PROBE_COMMAND,
+            ])
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(
+            parse_windows_probe(&String::from_utf8_lossy(&output.stdout)),
+            Some(HostOs::Windows)
+        );
+    }
+
+    #[test]
+    fn windows_version_labels_can_be_localized() {
+        for output in [
+            "\r\nMicrosoft Windows [版本 10.0.26100.1]\r\n",
+            "Microsoft Windows [Version 6.3.9600]\n",
+        ] {
+            assert_eq!(parse_windows_probe(output), Some(HostOs::Windows));
+        }
+    }
+
+    #[test]
+    fn windows_mentions_in_errors_are_not_version_answers() {
+        for output in [
+            "Windows command unavailable",
+            "cmd.exe: command not found",
+            "error: Microsoft Windows [Version 10.0.26100.1]",
+            "Microsoft Windows [Version unavailable]",
+        ] {
+            assert_eq!(parse_windows_probe(output), None, "{output}");
+        }
     }
 
     #[test]
