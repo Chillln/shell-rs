@@ -336,8 +336,9 @@ async fn sftp_native_picker_and_external_drop_share_confirmation(cx: &mut TestAp
             .find("file:目录")
             .bounds()
             .center();
-        let paths =
-            gpui_kit::ExternalPaths(vec![std::path::PathBuf::from("/tmp/Finder 文件")].into());
+        let paths = gpui_kit::ExternalPaths(
+            vec![std::env::current_dir().unwrap().join("Cargo.toml")].into(),
+        );
         window.dispatch_event(
             gpui_kit::FileDropEvent::Entered { position, paths }.to_platform_input(),
             cx,
@@ -368,7 +369,6 @@ async fn sftp_archive_drop_keeps_temporary_file_until_transfer_finishes(cx: &mut
     open_test_explorer(cx, handle).await;
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("压缩包文件.txt");
-    std::fs::write(&source, "内容").unwrap();
     cx.update_window(handle.into(), |_, window, cx| {
         window.render_frame(cx);
         let position = window
@@ -387,6 +387,13 @@ async fn sftp_archive_drop_keeps_temporary_file_until_transfer_finishes(cx: &mut
         );
     })
     .unwrap();
+    // 模拟压缩软件在 Drop 回调结束后才写出文件。
+    std::fs::write(&source, "内容").unwrap();
+    cx.wait_for(handle.into(), Duration::from_secs(2), |window, cx| {
+        window.render_frame(cx);
+        window.try_find("upload-confirm").is_some()
+    })
+    .await;
     std::fs::remove_file(&source).unwrap();
     cx.run_until_parked();
     cx.update_window(handle.into(), |_, window, cx| {

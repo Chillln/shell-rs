@@ -14,6 +14,7 @@ use std::{
     cmp::Ordering,
     path::PathBuf,
     rc::Rc,
+    time::Duration,
 };
 
 use super::staged_upload::stage_external_paths;
@@ -726,7 +727,8 @@ pub(super) fn accept_drops(
                     if !enabled {
                         return;
                     }
-                    match stage_external_paths(paths.paths().to_vec()) {
+                    let source_paths = paths.paths().to_vec();
+                    match stage_external_paths(source_paths.clone()) {
                         Ok((paths, staging)) => send(
                             ExplorerCommand::UploadPaths {
                                 paths,
@@ -736,6 +738,49 @@ pub(super) fn accept_drops(
                             window,
                             cx,
                         ),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                            // 360解压等程序可能在 Drop 回调返回后才生成临时文件。
+                            let executor = cx.background_executor().clone();
+                            let retry_executor = executor.clone();
+                            let prepared = executor.spawn(async move {
+                                for attempt in 0..50 {
+                                    retry_executor.timer(Duration::from_millis(100)).await;
+                                    match stage_external_paths(source_paths.clone()) {
+                                        Err(error)
+                                            if error.kind() == std::io::ErrorKind::NotFound
+                                                && attempt < 49 => {}
+                                        result => return result,
+                                    }
+                                }
+                                unreachable!()
+                            });
+                            let handle = window.window_handle();
+                            let send = send.clone();
+                            let target = target.clone();
+                            cx.spawn(async move |cx| {
+                                let result = prepared.await;
+                                let _ = cx.update_window(handle, |_, window, cx| match result {
+                                    Ok((paths, staging)) => send(
+                                        ExplorerCommand::UploadPaths {
+                                            paths,
+                                            target,
+                                            staging,
+                                        },
+                                        window,
+                                        cx,
+                                    ),
+                                    Err(error) => window.push_notification(
+                                        Notification::error(t!(
+                                            "explorer.upload.prepare_failed",
+                                            error = error
+                                        )),
+                                        cx,
+                                    ),
+                                });
+                            })
+                            .detach();
+                            cx.stop_propagation();
+                        }
                         Err(error) => {
                             window.push_notification(
                                 Notification::error(t!(

@@ -116,6 +116,9 @@ tokio = { version = "1", features = ["process", "test-util"] }
 gpui-kit = { version = "0.6.1", features = ["test-support"] }
 tempfile = "3"
 
+[patch.crates-io]
+gpui-pre-windows = { path = "vendor/gpui-pre-windows" }
+
 # What the release workflow ships: smaller and faster than the default, at
 # the cost of a longer build.
 [profile.release]

@@ -49,6 +49,9 @@ fn stage_paths_in(
         })
         .collect();
     if !temporary.iter().any(|temporary| *temporary) {
+        for path in &paths {
+            fs::symlink_metadata(path)?;
+        }
         return Ok((paths, None));
     }
 
@@ -58,6 +61,7 @@ fn stage_paths_in(
     let mut staged = Vec::with_capacity(paths.len());
     for (index, (source, temporary)) in paths.into_iter().zip(temporary).enumerate() {
         if !temporary {
+            fs::symlink_metadata(&source)?;
             staged.push(source);
             continue;
         }
@@ -67,7 +71,9 @@ fn stage_paths_in(
         let parent = directory.path().join(index.to_string());
         fs::create_dir(&parent)?;
         let target = parent.join(name);
-        copy_tree(&source, &target)?;
+        copy_tree(&source, &target).map_err(|error| {
+            io::Error::new(error.kind(), format!("{}：{error}", source.display()))
+        })?;
         staged.push(target);
     }
     Ok((
