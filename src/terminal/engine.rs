@@ -577,6 +577,22 @@ impl TerminalEngine {
         self.exec_with_timeout(command, super::DEFAULT_EXEC_TIMEOUT)
     }
 
+    pub fn capture_command(
+        &self,
+        command: String,
+        timeout: Duration,
+    ) -> Option<super::CommandReply> {
+        if !self.lifecycle.accepts_input() {
+            return None;
+        }
+        let (request, reply) = super::ExecRequest::capture(command, timeout);
+        self.runtime
+            .commands
+            .send(TerminalTransportCommand::Exec(request))
+            .ok()?;
+        Some(reply)
+    }
+
     /// 日志等慢速读取可单独指定期限，普通工具命令保持默认期限。
     pub fn exec_with_timeout(&self, command: String, timeout: Duration) -> Option<ExecReply> {
         if !matches!(self.lifecycle, TerminalLifecycle::Running) {

@@ -64,6 +64,18 @@ impl Workspace {
             id,
             host: panel.host_id(),
             view: panel.terminal().downgrade(),
+            description: format!(
+                "{}@{}:{}; remote OS: {}; local client OS: {}",
+                panel.login().user,
+                panel.login().host,
+                panel.login().port,
+                self.store
+                    .read(cx)
+                    .host(panel.host_id())
+                    .and_then(|host| host.os)
+                    .map_or("unknown", HostOs::label),
+                std::env::consts::OS
+            ),
         })
     }
 

@@ -16,6 +16,8 @@ use crate::terminal::{
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppSettings {
+    /// 自然语言助手的非秘密配置。
+    pub assistant: crate::assistant::AssistantSettings,
     /// S3 加密云同步的非秘密配置。
     pub cloud_sync: crate::cloud_sync::CloudSyncSettings,
     pub language: InterfaceLanguage,

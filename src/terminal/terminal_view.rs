@@ -482,6 +482,15 @@ impl TerminalView {
         self.engine.read(cx).exec(command)
     }
 
+    pub fn capture_command(
+        &self,
+        command: String,
+        timeout: std::time::Duration,
+        cx: &App,
+    ) -> Option<super::CommandReply> {
+        self.engine.read(cx).capture_command(command, timeout)
+    }
+
     /// 对读取日志使用独立的等待期限。
     pub fn exec_with_timeout(
         &self,

@@ -38,6 +38,8 @@ pub enum TerminalPanelEvent {
 pub struct TerminalPanel {
     id: RemoteTerminalId,
     host_id: HostId,
+    /// 该终端连接的登录快照，审批展示不能读取已修改的主机配置冒充连接目标。
+    login: crate::host::HostLogin,
     store: Entity<HostStore>,
     terminal: Entity<TerminalView>,
     remote_provider: SharedRemoteTerminalTransportProvider,
@@ -128,6 +130,7 @@ impl TerminalPanel {
         Self {
             id,
             host_id,
+            login,
             store,
             terminal,
             remote_provider,
@@ -145,6 +148,10 @@ impl TerminalPanel {
 
     pub fn host_id(&self) -> HostId {
         self.host_id
+    }
+
+    pub fn login(&self) -> &crate::host::HostLogin {
+        &self.login
     }
 
     pub fn tab_group(&self) -> Option<WeakEntity<TabGroup>> {
@@ -190,6 +197,7 @@ impl TerminalPanel {
             return;
         };
         let login = login.with_terminal_command(self.launch_command.clone());
+        self.login = login.clone();
         let factory = self.remote_provider.factory_for(&login);
         self.terminal.update(cx, |terminal, cx| {
             terminal.restart_with_factory(factory, cx)

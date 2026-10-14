@@ -205,7 +205,8 @@ fn settings_open_from_the_host_list_as_one_tab(cx: &mut TestAppContext) {
         assert!(window.find("settings").visible());
         assert_eq!(window.find("settings").focused(), Some(true));
         assert_eq!(window.find("settings-tab").label(), Some("设置"));
-        assert!(window.try_find("0-8").is_none());
+        assert!(window.find("0-8").visible());
+        assert!(window.try_find("0-9").is_none());
         assert!(window.try_find("update-available").is_none());
         // Two columns: the first category, 外观, is shown until another is
         // picked. `Settings` names its category rows by position.

@@ -29,6 +29,7 @@ impl ToolKind {
             ToolKind::Processes => t!("tools.kind.processes"),
             ToolKind::Connections => t!("tools.kind.connections"),
             ToolKind::Monitor => t!("tools.kind.monitor"),
+            ToolKind::Assistant => t!("assistant.title"),
         }
     }
 
@@ -43,6 +44,7 @@ impl ToolKind {
             ToolKind::Processes => CatalogIcon::ListFilter,
             ToolKind::Connections => CatalogIcon::Network,
             ToolKind::Monitor => CatalogIcon::Activity,
+            ToolKind::Assistant => CatalogIcon::Zap,
         })
     }
 
@@ -61,7 +63,7 @@ impl ToolKind {
             | ToolKind::Processes
             | ToolKind::Connections
             | ToolKind::Monitor => os.is_none_or(HostOs::is_linux),
-            ToolKind::Snippets => true,
+            ToolKind::Snippets | ToolKind::Assistant => true,
             // Wherever `sh` runs `docker`: Linux, and a Mac with Docker
             // Desktop; and bash's history file wherever `sh` reads it.
             ToolKind::Docker | ToolKind::History => os != Some(HostOs::Windows),
@@ -78,6 +80,7 @@ impl ToolKind {
             ToolKind::Processes => "tool-processes",
             ToolKind::Connections => "tool-connections",
             ToolKind::Monitor => "tool-monitor",
+            ToolKind::Assistant => "tool-assistant",
         }
     }
 }
@@ -89,6 +92,8 @@ pub struct ToolTerminal {
     pub host: HostId,
     /// Runs the tools' commands on the terminal's own connection.
     pub view: WeakEntity<TerminalView>,
+    /// 已认证连接的端点及账号，不跟随未重连的主机编辑变化。
+    pub description: String,
 }
 
 /// The right dock's one panel: the tool the switch at the window's edge
@@ -119,6 +124,7 @@ pub struct ToolSidebar {
     services: Entity<ServicePanel>,
     processes: Entity<ProcessPanel>,
     netstat: Entity<NetstatPanel>,
+    assistant: Entity<crate::assistant::AssistantPanel>,
     focus_handle: FocusHandle,
 }
 
@@ -127,10 +133,12 @@ impl ToolSidebar {
     /// dispatch on.
     pub fn new(
         store: Entity<HostStore>,
+        settings: Entity<crate::settings::SettingsStore>,
         dispatch: FocusHandle,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let secrets = store.read(cx).secrets();
         Self {
             tool: ToolKind::default(),
             terminal: None,
@@ -142,13 +150,20 @@ impl ToolSidebar {
             docker: cx.new(|_| DockerPanel::new(dispatch.clone())),
             services: cx.new(|cx| ServicePanel::new(dispatch.clone(), window, cx)),
             processes: cx.new(|cx| ProcessPanel::new(dispatch.clone(), window, cx)),
-            netstat: cx.new(|cx| NetstatPanel::new(dispatch, window, cx)),
+            netstat: cx.new(|cx| NetstatPanel::new(dispatch.clone(), window, cx)),
+            assistant: cx.new(|cx| {
+                crate::assistant::AssistantPanel::new(settings, secrets, dispatch, window, cx)
+            }),
             focus_handle: cx.focus_handle(),
         }
     }
 
     pub fn tool(&self) -> ToolKind {
         self.tool
+    }
+
+    pub fn assistant(&self) -> Entity<crate::assistant::AssistantPanel> {
+        self.assistant.clone()
     }
 
     /// Work on the SSH terminal now in front, and say whether the dock is
@@ -162,9 +177,9 @@ impl ToolSidebar {
         if self.terminal != terminal || self.shown != shown {
             self.terminal = terminal;
             self.shown = shown;
-            self.sync_tools(cx);
             cx.notify();
         }
+        self.sync_tools(cx);
     }
 
     pub fn toggle_monitor_detail(&mut self, detail: MonitorDetail, cx: &mut Context<Self>) {
@@ -274,6 +289,21 @@ impl ToolSidebar {
             view: terminal.view.clone(),
         });
         let showing = |tool| self.shown && self.tool == tool;
+        let assistant_target = self.terminal.as_ref().and_then(|terminal| {
+            let view = terminal.view.upgrade()?;
+            Some(crate::assistant::AssistantTarget {
+                exec: ExecTarget {
+                    terminal: terminal.id,
+                    view: terminal.view.clone(),
+                },
+                generation: view.read(cx).generation(cx),
+                description: terminal.description.clone(),
+            })
+        });
+        let assistant = showing(ToolKind::Assistant);
+        self.assistant.update(cx, |panel, cx| {
+            panel.set_target(assistant_target, assistant, cx)
+        });
         let (monitor, netstat, processes, services, docker, history) = (
             showing(ToolKind::Monitor),
             showing(ToolKind::Connections),
@@ -403,6 +433,7 @@ impl Render for ToolSidebar {
                     ToolKind::Processes => self.processes.clone().into_any_element(),
                     ToolKind::Connections => self.netstat.clone().into_any_element(),
                     ToolKind::Monitor => self.monitor.clone().into_any_element(),
+                    ToolKind::Assistant => self.assistant.clone().into_any_element(),
                 };
                 sidebar.child(div().flex_1().min_h_0().child(panel))
             })

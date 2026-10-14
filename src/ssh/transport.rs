@@ -339,9 +339,9 @@ fn pixel_dimension(cells: usize, cell_size: u16) -> u32 {
         .min(u32::MAX as usize) as u32
 }
 
-/// Run one command beside the shell and answer its request: what it printed
-/// on standard output, or why it did not run. Its standard error is dropped.
+/// 独立通道执行命令；普通工具只收标准输出，助手保留错误输出和退出状态。
 async fn run_exec(handle: &SshHandle, request: ExecRequest) {
+    let capture = request.captures_output();
     let mut channel = None;
     let execution = tokio::time::timeout(request.timeout(), async {
         channel = Some(
@@ -361,18 +361,39 @@ async fn run_exec(handle: &SshHandle, request: ExecRequest) {
             .await
             .map_err(|_| t!("ssh.exec.send_failed").to_string())?;
         let mut output = Vec::new();
+        let mut stderr = Vec::new();
+        let mut exit_code = None;
+        let mut signal = None;
+        let mut truncated = false;
         loop {
             match channel.wait().await {
                 Some(ChannelMsg::Data { data }) => {
-                    let room = EXEC_OUTPUT_LIMIT.saturating_sub(output.len());
+                    let room = EXEC_OUTPUT_LIMIT.saturating_sub(output.len() + stderr.len());
+                    truncated |= data.len() > room;
                     output.extend_from_slice(&data[..data.len().min(room)]);
                 }
+                Some(ChannelMsg::ExtendedData { data, ext: 1 }) if capture => {
+                    let room = EXEC_OUTPUT_LIMIT.saturating_sub(output.len() + stderr.len());
+                    truncated |= data.len() > room;
+                    stderr.extend_from_slice(&data[..data.len().min(room)]);
+                }
+                Some(ChannelMsg::ExitStatus { exit_status }) => exit_code = Some(exit_status),
+                Some(ChannelMsg::ExitSignal { signal_name, .. }) => {
+                    signal = Some(format!("{signal_name:?}"))
+                }
                 Some(ChannelMsg::Failure) => return Err(t!("ssh.exec.refused").to_string()),
-                Some(ChannelMsg::Eof | ChannelMsg::Close) | None => break,
+                Some(ChannelMsg::Eof) if !capture => break,
+                Some(ChannelMsg::Close) | None => break,
                 _ => {}
             }
         }
-        Ok(String::from_utf8_lossy(&output).into_owned())
+        Ok(crate::terminal::CommandOutput {
+            stdout: String::from_utf8_lossy(&output).into_owned(),
+            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            exit_code,
+            signal,
+            truncated,
+        })
     });
     let result = tokio::select! {
         result = execution => result.unwrap_or_else(|_| Err(t!("ssh.exec.timeout").to_string())),
@@ -384,7 +405,7 @@ async fn run_exec(handle: &SshHandle, request: ExecRequest) {
     };
     // 超时也显式关闭通道，避免远端日志读取留在后台运行。
     close_exec_channel(channel.as_mut()).await;
-    request.answer(result);
+    request.answer_capture(result);
 }
 
 async fn close_exec_channel(channel: Option<&mut russh::Channel<client::Msg>>) {
@@ -1248,6 +1269,43 @@ mod tests {
                 .execs
                 .contains(&CLI_COMMAND.to_string())
         );
+    }
+
+    #[test]
+    fn assistant_capture_keeps_stderr_and_the_exit_status_after_eof() {
+        let Some(server) = start_server(TestAuth::Password) else {
+            return;
+        };
+        let directory = tempfile::tempdir().unwrap();
+        let known_hosts = directory.path().join("known_hosts");
+        trust_server(server.port, &known_hosts);
+        let host = password_host(server.port);
+        let keychain = Arc::new(InMemorySecretStore::default());
+        keychain
+            .set(&host.password_secret(), TEST_PASSWORD)
+            .unwrap();
+        let connector = SshConnector::new(&known_hosts, keychain);
+        let config = SshConnectionConfig::from(&HostLogin::of(&host, None));
+        let (_shutdown, shutdown) = watch::channel(false);
+        let prompts = Arc::new(SshPrompts::new(Arc::new(|_| false), shutdown).non_interactive());
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let (handle, _) = connector.connect(&config, prompts).await.unwrap();
+                let (request, reply) =
+                    ExecRequest::capture(CLI_COMMAND.to_string(), Duration::from_secs(3));
+                run_exec(&handle, request).await;
+                let output = reply.try_recv().unwrap().unwrap();
+                assert_eq!(output.stdout, "out");
+                assert_eq!(output.stderr, "err");
+                assert_eq!(output.exit_code, Some(3));
+                assert!(!output.truncated);
+                let _ = handle
+                    .disconnect(russh::Disconnect::ByApplication, "test complete", "en")
+                    .await;
+            });
     }
 
     #[test]

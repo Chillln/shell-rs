@@ -1,0 +1,215 @@
+_version: 2
+
+assistant.title:
+  zh-CN: 自然语言助手
+  en: AI assistant
+assistant.connection_settings:
+  zh-CN: 模型接口
+  en: Model API
+assistant.protocol:
+  zh-CN: 接口协议
+  en: API protocol
+assistant.permission:
+  zh-CN: 操作权限
+  en: Operation permissions
+assistant.keywords:
+  zh-CN: AI 大模型 自然语言 API 模型 密钥 思考 推理 流式
+  en: AI assistant API model key reasoning streaming
+assistant.settings:
+  zh-CN: 设置…
+  en: Settings…
+assistant.settings_hint:
+  zh-CN: 支持 Responses 和兼容 Chat Completions 的流式接口。地址可填 API 基础地址或完整标准接口地址。密钥留空会保留此地址已保存的密钥；本地免密接口可留空。温度和推理强度留空时不发送该参数。
+  en: Supports streaming Responses and Chat Completions compatible APIs. Enter a base URL or a complete standard endpoint. A blank key preserves this URL's saved key; local APIs may omit authentication. Leave temperature and reasoning effort blank to omit them.
+assistant.endpoint:
+  zh-CN: API 地址
+  en: API URL
+assistant.model:
+  zh-CN: 模型名称
+  en: Model name
+assistant.timeout:
+  zh-CN: 请求与命令超时（秒，5–300）
+  en: Request and command timeout (seconds, 5–300)
+assistant.tokens:
+  zh-CN: 最大输出 Token（256–32768）
+  en: Maximum output tokens (256–32768)
+assistant.temperature:
+  zh-CN: 温度（可选，0–2）
+  en: Temperature (optional, 0–2)
+assistant.context_tokens:
+  zh-CN: 上下文预算（估算 Token，4096–262144）
+  en: Context budget (estimated tokens, 4096–262144)
+assistant.compacting:
+  zh-CN: 正在压缩历史上下文，保留目标、执行结果和拒绝记录…
+  en: Compacting conversation history while preserving goals, results, and refusals…
+assistant.compacted:
+  zh-CN: 已自动压缩 %{count} 次；历史原文仍可在上方查看
+  en: Automatically compacted %{count} times; original messages remain above
+assistant.reasoning_effort:
+  zh-CN: 推理强度（可选：none、minimal、low、medium、high、xhigh）
+  en: "Reasoning effort (optional: none, minimal, low, medium, high, xhigh)"
+assistant.instructions:
+  zh-CN: 附加指令（不会改变执行权限）
+  en: Additional instructions (do not change permissions)
+assistant.api_key:
+  zh-CN: API 密钥（仅保存到系统钥匙串）
+  en: API key (saved only in the system keychain)
+assistant.save:
+  zh-CN: 保存
+  en: Save
+assistant.clear_key:
+  zh-CN: 删除密钥
+  en: Delete key
+assistant.suggest:
+  zh-CN: 仅建议
+  en: Suggestions only
+assistant.approve_mode:
+  zh-CN: 逐次审批
+  en: Approve each command
+assistant.saving:
+  zh-CN: 正在保存配置…
+  en: Saving settings…
+assistant.saved:
+  zh-CN: 配置已保存，新的请求使用此接口。
+  en: Settings saved. New requests use this API.
+assistant.key_cleared:
+  zh-CN: 此接口的密钥已删除。
+  en: This API's key was deleted.
+assistant.key_error:
+  zh-CN: 无法读写系统钥匙串中的 API 密钥。检查系统凭据服务后重试。
+  en: Could not access the API key in the system keychain. Check the credential service and retry.
+assistant.invalid_endpoint:
+  zh-CN: 填写有效的 HTTPS 接口地址；HTTP 仅允许 localhost、127.0.0.1 和 ::1。地址不能包含登录信息、查询参数或片段，完整接口路径需匹配所选协议。
+  en: Enter a valid HTTPS URL; HTTP is allowed only for localhost, 127.0.0.1, or ::1. Omit credentials, query parameters, and fragments. A complete endpoint must match the selected protocol.
+assistant.invalid_model:
+  zh-CN: 填写模型名称。
+  en: Enter a model name.
+assistant.invalid_parameters:
+  zh-CN: 检查超时、输出上限、上下文预算、温度和推理强度；输出上限须小于上下文预算，附加指令不能超过 16000 字节。
+  en: Check timeout, output limit, context budget, temperature, and reasoning effort. Output limit must be below the context budget. Additional instructions must not exceed 16000 bytes.
+assistant.network_error:
+  zh-CN: 模型请求失败或超时。检查 API 地址、网络和超时设置。
+  en: The model request failed or timed out. Check the API URL, network, and timeout.
+assistant.http_error:
+  zh-CN: 模型接口返回 HTTP %{status}。检查密钥、模型名称、协议和参数。
+  en: The model API returned HTTP %{status}. Check the key, model, protocol, and parameters.
+assistant.response_limit:
+  zh-CN: 模型输出超过大小上限，请缩小请求范围。
+  en: Model output exceeded the size limit. Narrow the request.
+assistant.invalid_response:
+  zh-CN: 模型响应格式无效或未完成；没有执行任何新命令。检查接口协议和工具调用支持。
+  en: The model response was invalid or incomplete; no new command was executed. Check the API protocol and tool calling support.
+assistant.incomplete_stream:
+  zh-CN: 流式连接在响应结束前中断；没有执行任何新命令。
+  en: The stream disconnected before completion; no new command was executed.
+assistant.input_hint:
+  zh-CN: 描述问题… 回车发送，Shift+回车换行
+  en: Describe the problem… Enter to send, Shift+Enter for a new line
+assistant.idle:
+  zh-CN: 等待输入
+  en: Ready for your question
+assistant.configure:
+  zh-CN: 请先配置模型接口
+  en: Configure a model API to begin
+assistant.welcome:
+  zh-CN: 一起排查这台主机
+  en: Explore this host together
+assistant.welcome_hint:
+  zh-CN: 可以询问运行中的服务、分析错误或检查磁盘空间。执行命令前，你可以查看完整内容并决定是否批准。
+  en: Ask about running services, investigate errors, or check disk space. Review each command before deciding whether to approve it.
+assistant.privacy_short:
+  zh-CN: 对话仅保存在内存 · 数据发送到模型接口
+  en: In-memory chat · Data sent to model API
+assistant.copy:
+  zh-CN: 复制内容
+  en: Copy content
+assistant.approval_title:
+  zh-CN: 请确认执行命令
+  en: Review this command
+assistant.stdout:
+  zh-CN: 标准输出
+  en: Standard output
+assistant.stderr:
+  zh-CN: 错误输出
+  en: Standard error
+assistant.exit_code:
+  zh-CN: 退出码 %{code}
+  en: Exit code %{code}
+assistant.signal:
+  zh-CN: 信号 %{signal}
+  en: Signal %{signal}
+assistant.exit_unknown:
+  zh-CN: 未收到退出码
+  en: Exit code unavailable
+assistant.result_unknown:
+  zh-CN: 结果未知
+  en: Outcome unknown
+assistant.command_running:
+  zh-CN: 执行中…
+  en: Running…
+assistant.no_output:
+  zh-CN: 命令未返回文本输出
+  en: The command returned no text output
+assistant.output_truncated:
+  zh-CN: 输出超过展示上限，已截断
+  en: Output exceeded the display limit and was truncated
+assistant.privacy:
+  zh-CN: 当前主机信息、你的请求和批准命令的结果会发送到配置的模型接口。不会自动读取终端历史；对话仅保存在本次运行的内存中。
+  en: Current host information, your requests, and approved command results are sent to the configured model API. Terminal history is not read automatically; conversations stay in memory for this run.
+assistant.execution_notice:
+  zh-CN: 使用此 SSH 连接的登录账号执行，独立通道无终端、无输入，每次工作目录不继承。输出会发送给模型；取消不会撤销已发生的修改。
+  en: Executes as this SSH connection's login user on a separate channel, without a terminal or input. Working directories do not persist. Output is sent to the model; cancellation does not undo changes.
+assistant.clear:
+  zh-CN: 清空
+  en: Clear
+assistant.send:
+  zh-CN: 发送
+  en: Send
+assistant.stop:
+  zh-CN: 停止
+  en: Stop
+assistant.execute:
+  zh-CN: 批准并执行
+  en: Approve and execute
+assistant.reject:
+  zh-CN: 拒绝
+  en: Reject
+assistant.rejected:
+  zh-CN: 已拒绝，命令未执行。
+  en: Declined. The command was not executed.
+assistant.stopped:
+  zh-CN: 已停止。已开始的远程操作可能仍有影响，请核对主机状态。
+  en: Stopped. A started remote operation may still have effects; verify the host state.
+assistant.thinking:
+  zh-CN: 正在接收模型响应…
+  en: Receiving model response…
+assistant.ready:
+  zh-CN: 响应已完成
+  en: Response complete
+assistant.awaiting_approval:
+  zh-CN: 等待你批准此命令
+  en: Waiting for your command approval
+assistant.executing:
+  zh-CN: 正在执行批准的命令…
+  en: Running the approved command…
+assistant.context_limit:
+  zh-CN: 已达到请求大小或连续操作上限。请清空对话或缩小问题范围。
+  en: The request size or consecutive operation limit was reached. Clear the conversation or narrow the task.
+assistant.execution_unknown:
+  zh-CN: 连接已结束，命令结果未知。不要直接重试修改操作，请先核对远端状态。
+  en: The connection ended and the command outcome is unknown. Verify remote state before retrying a write.
+assistant.reasoning:
+  zh-CN: 推理输出
+  en: Reasoning output
+assistant.role.user:
+  zh-CN: 你
+  en: You
+assistant.role.assistant:
+  zh-CN: 助手
+  en: Assistant
+assistant.role.command:
+  zh-CN: 已批准命令
+  en: Approved command
+assistant.role.result:
+  zh-CN: 执行结果
+  en: Result

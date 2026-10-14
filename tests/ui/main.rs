@@ -5,6 +5,7 @@
 //! `tests/` would be a binary of its own, linking the whole GPUI stack
 //! again. `support` holds the fixtures and fakes the modules share.
 
+mod assistant;
 mod support;
 
 mod cli;

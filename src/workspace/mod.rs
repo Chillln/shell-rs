@@ -2,6 +2,7 @@
 //! the right sidebar's tools, status bar, and the start page (recent hosts)
 //! the center shows while no tab is open.
 
+mod assistant;
 mod automatic_sync;
 mod cli_changes;
 mod cloud_sync;

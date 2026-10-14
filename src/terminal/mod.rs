@@ -52,11 +52,12 @@ pub use terminal_view::{
     TERMINAL_FIND_KEY_CONTEXT, TERMINAL_KEY_CONTEXT, TerminalMenuItems, TerminalView,
 };
 pub use theme::{TerminalColors, TerminalTheme};
-pub(crate) use transport::{DEFAULT_EXEC_TIMEOUT, send_event};
 pub use transport::{
-    ExecReply, ExecRequest, ExecResult, FixedLocalTerminalTransportProvider,
-    FixedRemoteTerminalTransportProvider, LocalTerminalTransportProvider,
-    RemoteTerminalTransportProvider, SharedLocalTerminalTransportProvider,
-    SharedRemoteTerminalTransportProvider, SharedTerminalTransportFactory, TerminalTransport,
-    TerminalTransportCommand, TerminalTransportEvent, TerminalTransportFactory,
+    CommandOutput, CommandReply, CommandResult, ExecReply, ExecRequest, ExecResult,
+    FixedLocalTerminalTransportProvider, FixedRemoteTerminalTransportProvider,
+    LocalTerminalTransportProvider, RemoteTerminalTransportProvider,
+    SharedLocalTerminalTransportProvider, SharedRemoteTerminalTransportProvider,
+    SharedTerminalTransportFactory, TerminalTransport, TerminalTransportCommand,
+    TerminalTransportEvent, TerminalTransportFactory,
 };
+pub(crate) use transport::{DEFAULT_EXEC_TIMEOUT, send_event};

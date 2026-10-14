@@ -190,6 +190,7 @@ impl Change {
 /// error: writing it when `writing`, deleting it otherwise.
 fn secret_failure(secret: &SecretRef, writing: bool) -> fn(&str) -> SharedString {
     match (secret, writing) {
+        (SecretRef::Assistant { .. }, _) => |_| t!("assistant.key_error"),
         (SecretRef::CloudSync { .. }, _) => |error| t!("sync.error.keychain", error = error),
         (SecretRef::Password { .. }, true) => {
             |error| t!("host.store.secret.password_write", error = error)

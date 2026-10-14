@@ -343,7 +343,15 @@ impl Workspace {
         let credential_panel =
             cx.new(|cx| CredentialPanel::new(store.clone(), focus_handle.clone(), window, cx));
         let sidebar = cx.new(|_| Sidebar::new(host_panel.clone(), forward_panel, credential_panel));
-        let tools = cx.new(|cx| ToolSidebar::new(store.clone(), focus_handle.clone(), window, cx));
+        let tools = cx.new(|cx| {
+            ToolSidebar::new(
+                store.clone(),
+                settings.clone(),
+                focus_handle.clone(),
+                window,
+                cx,
+            )
+        });
         // Start with focus in the host panel so window-level actions have a
         // dispatch path. The workspace's own handle is never focused: the
         // dialog layer is its child, and a focused ancestor would keep the
@@ -1241,7 +1249,19 @@ impl Workspace {
         // Something may have been installed or removed since last time.
         integration.update(cx, |integration, cx| integration.refresh(cx));
         let cloud_sync = self.cloud_sync.clone();
-        let panel = cx.new(|cx| SettingsPanel::new(store, integration, cloud_sync, window, cx));
+        let secrets = self.store.read(cx).secrets();
+        let dispatch = self.focus_handle.clone();
+        let assistant = cx.new(|cx| {
+            crate::assistant::AssistantSettingsPanel::new(
+                store.clone(),
+                secrets,
+                dispatch,
+                window,
+                cx,
+            )
+        });
+        let panel =
+            cx.new(|cx| SettingsPanel::new(store, integration, cloud_sync, assistant, window, cx));
         let subscription = cx.subscribe_in(
             &panel,
             window,
@@ -2324,6 +2344,7 @@ fn new_terminal_panel(
             }
             TerminalPanelEvent::StatusChanged(_, host_id) => {
                 this.refresh_host_connection_state(*host_id, cx);
+                this.sync_tool_sidebar(window, cx);
                 cx.notify();
             }
             TerminalPanelEvent::PromptRequested(terminal_id, host_id, prompt) => this
@@ -2600,6 +2621,18 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::on_editor_shortcut))
             .on_action(cx.listener(Self::on_close_local_terminal))
             .on_action(cx.listener(Self::on_open_settings))
+            .on_action(cx.listener(Self::on_send_assistant_message))
+            .on_action(cx.listener(Self::on_approve_assistant_command))
+            .on_action(cx.listener(Self::on_reject_assistant_command))
+            .on_action(cx.listener(Self::on_stop_assistant))
+            .on_action(cx.listener(Self::on_clear_assistant_conversation))
+            .on_action(cx.listener(Self::on_save_assistant_settings))
+            .on_action(cx.listener(Self::on_clear_assistant_key))
+            .on_action(cx.listener(Self::on_set_assistant_protocol))
+            .on_action(cx.listener(Self::on_set_assistant_permission))
+            .on_action(cx.listener(Self::on_toggle_assistant_reasoning))
+            .on_action(cx.listener(Self::on_toggle_assistant_details))
+            .on_action(cx.listener(Self::on_copy_assistant_entry))
             .on_action(cx.listener(Self::on_install_cli_command))
             .on_action(cx.listener(Self::on_remove_cli_command))
             .on_action(cx.listener(Self::on_install_agent_skill))

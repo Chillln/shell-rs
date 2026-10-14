@@ -51,6 +51,7 @@ pub enum SettingsPanelEvent {
 /// fields read and write the `SettingsStore`; the workspace applies what
 /// changes.
 pub struct SettingsPanel {
+    assistant: Entity<crate::assistant::AssistantSettingsPanel>,
     cloud_sync: Entity<crate::cloud_sync::CloudSyncPanel>,
     store: Entity<SettingsStore>,
     /// What of the external CLI is installed, for 外部 CLI.
@@ -80,6 +81,7 @@ impl SettingsPanel {
         store: Entity<SettingsStore>,
         integration: Entity<CliIntegration>,
         cloud_sync: Entity<crate::cloud_sync::CloudSyncPanel>,
+        assistant: Entity<crate::assistant::AssistantSettingsPanel>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -105,6 +107,7 @@ impl SettingsPanel {
             });
         });
         Self {
+            assistant,
             cloud_sync,
             store,
             integration,
@@ -122,6 +125,10 @@ impl SettingsPanel {
 
     pub fn tab_group(&self) -> Option<WeakEntity<TabGroup>> {
         self.tab_group.clone()
+    }
+
+    pub fn assistant(&self) -> Entity<crate::assistant::AssistantSettingsPanel> {
+        self.assistant.clone()
     }
 
     /// Take the focus, and tell the workspace this is the tab ⌘W closes.
@@ -239,7 +246,7 @@ struct Category {
 type CategoryGroups = fn(&SettingsPanel, &App) -> Vec<SettingGroup>;
 
 /// The categories, in the order the left column lists them.
-const CATEGORIES: [Category; 8] = [
+const CATEGORIES: [Category; 9] = [
     Category {
         title: "settings.category.appearance",
         icon: CatalogIcon::Palette,
@@ -280,7 +287,24 @@ const CATEGORIES: [Category; 8] = [
         icon: CatalogIcon::Lock,
         groups: cloud_sync_groups,
     },
+    Category {
+        title: "assistant.title",
+        icon: CatalogIcon::Zap,
+        groups: assistant_groups,
+    },
 ];
+
+fn assistant_groups(panel: &SettingsPanel, _: &App) -> Vec<SettingGroup> {
+    let assistant = panel.assistant.clone();
+    vec![
+        SettingGroup::new()
+            .title(t!("assistant.connection_settings"))
+            .items([
+                SettingItem::render(move |_, _, _| assistant.clone().into_any_element())
+                    .keywords(keywords(t!("assistant.keywords"))),
+            ]),
+    ]
+}
 
 /// 云同步表单自身持有输入实体，设置容器提供搜索与滚动区域。
 fn cloud_sync_groups(panel: &SettingsPanel, _: &App) -> Vec<SettingGroup> {

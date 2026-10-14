@@ -28,6 +28,8 @@ pub const SERVICE: &str = "shellrs";
 /// 地址 + 用户名」归属，经由同一个代理的主机共用。
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum SecretRef {
+    /// 模型接口的密钥，按规范化后的接口地址隔离。
+    Assistant { endpoint: String },
     /// S3 配置的访问密钥或临时令牌。
     CloudSync { profile: String, name: String },
     /// 某个 SSH 端点的登录密码。
@@ -93,6 +95,10 @@ impl SecretRef {
     /// 钥匙串条目的账户名。前缀区分种类，在 Keychain Access 里直接可读。
     pub fn account(&self) -> String {
         match self {
+            Self::Assistant { endpoint } => {
+                use sha2::{Digest as _, Sha256};
+                format!("assistant:{:x}", Sha256::digest(endpoint.as_bytes()))
+            }
             Self::CloudSync { profile, name } => format!("cloud-sync:{profile}:{name}"),
             Self::Password { user, host, port } => format!("password:{user}@{host}:{port}"),
             Self::Passphrase { key_path } => format!("passphrase:{key_path}"),

@@ -30,6 +30,19 @@ pub enum TerminalTransportCommand {
 /// What a command run beside the shell printed, or why it did not run.
 pub type ExecResult = Result<String, String>;
 
+/// 完整执行结果供助手判断失败；取消与超时不代表远端操作已经回滚。
+#[derive(Clone, Debug, Default, serde::Serialize)]
+#[non_exhaustive]
+pub struct CommandOutput {
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: Option<u32>,
+    pub signal: Option<String>,
+    pub truncated: bool,
+}
+
+pub type CommandResult = Result<CommandOutput, String>;
+
 pub(crate) const DEFAULT_EXEC_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A command to run beside the shell, on the terminal's own SSH connection:
@@ -44,6 +57,7 @@ pub struct ExecRequest {
     reply: mpsc::Sender<ExecResult>,
     timeout: Duration,
     cancelled: Arc<AtomicBool>,
+    capture: Option<mpsc::Sender<CommandResult>>,
 }
 
 impl ExecRequest {
@@ -56,6 +70,7 @@ impl ExecRequest {
                 reply,
                 timeout: DEFAULT_EXEC_TIMEOUT,
                 cancelled: cancelled.clone(),
+                capture: None,
             },
             ExecReply {
                 receiver,
@@ -69,6 +84,24 @@ impl ExecRequest {
         self
     }
 
+    pub fn capture(command: String, timeout: Duration) -> (Self, CommandReply) {
+        let (mut request, unused) = Self::new(command);
+        // 旧文本回复的接收端取消标志独立，避免丢弃它取消新请求。
+        let (sender, receiver) = mpsc::channel();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        request.cancelled = cancelled.clone();
+        request.capture = Some(sender);
+        request.timeout = timeout;
+        drop(unused);
+        (
+            request,
+            CommandReply {
+                receiver,
+                cancelled,
+            },
+        )
+    }
+
     pub fn command(&self) -> &str {
         &self.command
     }
@@ -78,8 +111,44 @@ impl ExecRequest {
     pub fn is_cancelled(&self) -> bool {
         self.cancelled.load(Ordering::Acquire)
     }
+
+    pub(crate) fn captures_output(&self) -> bool {
+        self.capture.is_some()
+    }
     pub fn answer(self, result: ExecResult) {
-        let _ = self.reply.send(result);
+        if let Some(capture) = self.capture {
+            let _ = capture.send(result.map(|stdout| CommandOutput {
+                stdout,
+                ..Default::default()
+            }));
+        } else {
+            let _ = self.reply.send(result);
+        }
+    }
+
+    pub fn answer_capture(self, result: CommandResult) {
+        if let Some(capture) = self.capture {
+            let _ = capture.send(result);
+        } else {
+            let _ = self.reply.send(result.map(|output| output.stdout));
+        }
+    }
+}
+
+pub struct CommandReply {
+    receiver: mpsc::Receiver<CommandResult>,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl CommandReply {
+    pub fn try_recv(&self) -> Result<CommandResult, mpsc::TryRecvError> {
+        self.receiver.try_recv()
+    }
+}
+
+impl Drop for CommandReply {
+    fn drop(&mut self) {
+        self.cancelled.store(true, Ordering::Release);
     }
 }
 

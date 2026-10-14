@@ -4,6 +4,7 @@
 use gpui_kit::*;
 
 use crate::{
+    assistant::{ApiProtocol, PermissionMode},
     cli::AgentKind,
     docker::{ContainerCommand, ContainerSubject, DockerObject},
     editor::EditorId,
@@ -54,6 +55,22 @@ gpui_kit::actions!(
         ToggleHostPanel,
         /// Show or hide the right sidebar, whichever tool it is showing.
         ToggleToolSidebar,
+        /// 发送自然语言请求。
+        SendAssistantMessage,
+        /// 批准当前连接上的确切命令。
+        ApproveAssistantCommand,
+        /// 拒绝待批准命令。
+        RejectAssistantCommand,
+        /// 取消模型请求与待执行操作。
+        StopAssistant,
+        /// 清空当前主机的助手对话。
+        ClearAssistantConversation,
+        /// 保存接口配置与钥匙串密钥。
+        SaveAssistantSettings,
+        /// 删除当前接口的模型密钥。
+        ClearAssistantKey,
+        /// 展开或收起服务商返回的推理输出。
+        ToggleAssistantReasoning,
         /// Read the network connections of the SSH terminal's host again.
         RefreshConnections,
         /// Read the processes of the SSH terminal's host again.
@@ -187,6 +204,14 @@ macro_rules! id_actions {
 }
 
 id_actions! {
+    /// 选择模型接口协议。
+    SetAssistantProtocol(ApiProtocol);
+    /// 选择助手操作权限。
+    SetAssistantPermission(PermissionMode);
+    /// 展开或收起命令的输出记录。
+    ToggleAssistantDetails(u64);
+    /// 复制一条对话或命令记录。
+    CopyAssistantEntry(u64);
     /// Open a new terminal connection for a host.
     ConnectHost(HostId);
     /// Mark a host disconnected.
@@ -478,10 +503,11 @@ pub enum ToolKind {
     Processes,
     Connections,
     Monitor,
+    Assistant,
 }
 
 impl ToolKind {
-    pub const ALL: [ToolKind; 7] = [
+    pub const ALL: [ToolKind; 8] = [
         ToolKind::Snippets,
         ToolKind::History,
         ToolKind::Docker,
@@ -489,6 +515,7 @@ impl ToolKind {
         ToolKind::Processes,
         ToolKind::Connections,
         ToolKind::Monitor,
+        ToolKind::Assistant,
     ];
 }
 

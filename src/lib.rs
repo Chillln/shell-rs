@@ -9,6 +9,7 @@
 //! `connection` 与 `shared` (跨模块共用), `i18n` (多语言), `workspace` (窗口壳), `app` (动作、快捷键、资源).
 
 pub mod app;
+pub mod assistant;
 pub mod cli;
 pub mod cloud_sync;
 pub mod connection;
